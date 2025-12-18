@@ -62,7 +62,7 @@ jobs:
               --title "Fix: ${{ github.event.issue.title }} (#${ISSUE_NUMBER})" \
               --body-file pr_body.txt \
               --base main \
-              --head "$BRANCH_NAME" || echo "PR already exists or failed to create"
+              --head "$BRANCH_NAME" || gh pr edit "$BRANCH_NAME" --body-file pr_body.txt
           fi
 
       - name: Post Summary
