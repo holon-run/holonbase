@@ -67,42 +67,76 @@ async def run_adapter():
         subprocess.run(["git", "commit", "-m", "holon-baseline"], check=True)
     else:
         print("Existing git repo found. Baseline established.")
+    
+    # 3.5 Sync Environment to Claude Settings (Wegent style)
+    claude_settings_path = os.path.expanduser("~/.claude/settings.json")
+    if os.path.exists(claude_settings_path):
+        try:
+            with open(claude_settings_path, 'r') as f:
+                settings = json.load(f)
+            
+            env_section = settings.get("env", {})
+            auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+            base_url = os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_API_URL")
+            
+            print(f"Syncing environment: has_token={bool(auth_token)}, has_base_url={bool(base_url)}")
+            
+            if auth_token:
+                env_section["ANTHROPIC_AUTH_TOKEN"] = auth_token
+                env_section["ANTHROPIC_API_KEY"] = auth_token
+            if base_url:
+                env_section["ANTHROPIC_BASE_URL"] = base_url
+            
+            settings["env"] = env_section
+            
+            with open(claude_settings_path, 'w') as f:
+                json.dump(settings, f, indent=2)
+            print(f"Synced environment to {claude_settings_path}")
+        except Exception as e:
+            print(f"Warning: Failed to sync Claude settings: {e}")
 
-    # 4. Initialize Claude SDK (Robust)
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY not set")
-        sys.exit(1)
-
-    client = ClaudeSDKClient(api_key=api_key)
+    from claude_agent_sdk.types import AssistantMessage, TextBlock, ResultMessage
     
     # Options for headless behavior
     options = ClaudeAgentOptions(
         permission_mode="bypassPermissions",
         cwd=workspace_path
     )
+    client = ClaudeSDKClient(options=options)
     
     start_time = datetime.now()
     log_file_path = os.path.join(evidence_dir, "execution.log")
     
+    success = True
     try:
         print("Connecting to Claude Code...")
-        # Start session
-        async with client.connect() as session:
-            print("Session established. Running query...")
+        await client.connect()
+        print("Session established. Running query...")
+        
+        # Simple wrapper to capture everything to evidence
+        with open(log_file_path, 'w') as log_file:
+            # Run the query
+            await client.query(full_prompt)
             
-            # Simple wrapper to capture everything to evidence
-            with open(log_file_path, 'w') as log_file:
-                # Run the query
-                # Note: client.query() usually returns a Response object
-                # We want to capture thinking steps too if possible.
-                # In this v0.1 simplified bridge, we'll wait for final response.
-                result = await session.query(full_prompt, options=options)
+            final_output = ""
+            async for msg in client.receive_response():
+                # print(f"Received message type: {type(msg).__name__}")
+                log_file.write(f"Message: {msg}\n")
                 
-                # Write final output to log
-                log_file.write(f"--- FINAL OUTPUT ---\n{result}\n")
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            final_output += block.text
+                elif isinstance(msg, ResultMessage):
+                    print(f"Task result: {msg.subtype}, is_error: {msg.is_error}")
+                    if msg.is_error:
+                        success = False
+                    break
+            
+            result = final_output
+            log_file.write(f"--- FINAL OUTPUT ---\n{result}\n")
 
-        print("Claude Code execution finished.")
+        print(f"Claude Code execution finished. Success: {success}")
         
         # 5. Generate Artifacts
         end_time = datetime.now()
@@ -119,7 +153,7 @@ async def run_adapter():
                 "version": "0.1.0"
             },
             "status": "completed",
-            "outcome": "success",
+            "outcome": "success" if success else "failure",
             "duration": duration,
             "artifacts": [
                 {"name": "diff.patch", "path": "diff.patch"},
@@ -136,7 +170,7 @@ async def run_adapter():
             f.write(patch_content)
             
         with open(os.path.join(output_dir, "summary.md"), 'w') as f:
-            f.write(f"# Task Summary\n\nGoal: {goal}\n\nOutcome: Success\n\n## Actions\n{result}\n")
+            f.write(f"# Task Summary\n\nGoal: {goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n")
 
         print(f"Artifacts written to {output_dir}")
         

@@ -126,6 +126,17 @@ func (r *Runtime) RunHolon(ctx context.Context, cfg *ContainerConfig) error {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
+	// 4.5 Stream Logs
+	out, err := r.cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	})
+	if err == nil {
+		defer out.Close()
+		go io.Copy(os.Stdout, out)
+	}
+
 	// 5. Wait for completion
 	statusCh, errCh := r.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	select {
@@ -161,12 +172,17 @@ func (r *Runtime) buildComposedImage(ctx context.Context, baseImage, adapterImag
 
 	dockerfile := fmt.Sprintf(`
 FROM %s
-# Install Node and Python if missing (Debian/Ubuntu assumption for v0.1)
-RUN apt-get update && apt-get install -y nodejs npm python3 python3-pip git || true
+# Install Node and Python if missing
+RUN apt-get update && apt-get install -y curl git python3 python3-pip || true
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs || true
 # Layer the adapter from the adapter image
 COPY --from=%s /app /app
 COPY --from=%s /root/.claude /root/.claude
 COPY --from=%s /root/.claude.json /root/.claude.json
+# Install Claude Code and dependencies
+RUN npm install -g @anthropic-ai/claude-code && \
+    if [ -f /app/requirements.txt ]; then pip3 install --no-cache-dir -r /app/requirements.txt --break-system-packages || pip3 install --no-cache-dir -r /app/requirements.txt; fi
 # Ensure environment
 ENV IS_SANDBOX=1
 WORKDIR /workspace

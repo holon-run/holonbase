@@ -48,9 +48,16 @@ var runCmd = &cobra.Command{
 		// Collect Env Vars
 		envVars := make(map[string]string)
 
-		// 1. Automatic Secret Injection (v0.1: Anthropic Key)
+		// 1. Automatic Secret Injection (v0.1: Anthropic Key & URL)
 		if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 			envVars["ANTHROPIC_API_KEY"] = key
+			envVars["ANTHROPIC_AUTH_TOKEN"] = key
+		}
+		// Support both ANTHROPIC_BASE_URL (new) and ANTHROPIC_API_URL (alias for convenience)
+		if url := os.Getenv("ANTHROPIC_BASE_URL"); url != "" {
+			envVars["ANTHROPIC_BASE_URL"] = url
+		} else if url := os.Getenv("ANTHROPIC_API_URL"); url != "" {
+			envVars["ANTHROPIC_BASE_URL"] = url
 		}
 
 		// 2. Custom Env Vars from CLI (--env K=V)
