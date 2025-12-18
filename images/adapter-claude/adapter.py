@@ -194,7 +194,9 @@ async def run_adapter():
             f.write(patch_content)
             
         with open(os.path.join(output_dir, "summary.md"), 'w') as f:
-            summary_text = f"# Task Summary\n\nGoal: {goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n"
+            # goal might contain escaped newlines if it comes from YAML
+            clean_goal = str(goal).replace('\\n', '\n')
+            summary_text = f"# Task Summary\n\nGoal: {clean_goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n"
             f.write(summary_text)
 
         print(f"Artifacts written to {output_dir}")
