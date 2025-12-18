@@ -57,6 +57,9 @@ async def run_adapter():
     workspace_path = "/workspace"
     os.chdir(workspace_path)
     
+    # Fix dubious ownership error for git
+    subprocess.run(["git", "config", "--global", "--add", "safe.directory", "/workspace"], check=False)
+    
     print("--- BEFORE: Files in /workspace ---")
     subprocess.run(["ls", "-la", workspace_path], check=False)
     
