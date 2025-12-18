@@ -12,5 +12,7 @@ output:
   artifacts:
     - path: "manifest.json"
       required: true
-    - path: "examples/buggy.go"
+    - path: "diff.patch"
+      required: true
+    - path: "summary.md"
       required: true

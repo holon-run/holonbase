@@ -24,6 +24,11 @@ build-host:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/holon
 
+## build-adapter-image: Build the Claude adapter Docker image
+build-adapter-image:
+	@echo "Building Claude adapter image..."
+	docker build -t holon-adapter-claude ./images/adapter-claude
+
 ## test: Run all project tests
 test:
 	@echo "Running tests..."
