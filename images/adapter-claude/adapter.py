@@ -108,6 +108,7 @@ async def run_adapter():
     log_file_path = os.path.join(evidence_dir, "execution.log")
     
     success = True
+    result = ""
     try:
         print("Connecting to Claude Code...")
         await client.connect()
@@ -137,6 +138,9 @@ async def run_adapter():
             log_file.write(f"--- FINAL OUTPUT ---\n{result}\n")
 
         print(f"Claude Code execution finished. Success: {success}")
+        print("--- AGENT OUTPUT START ---")
+        print(result)
+        print("--- AGENT OUTPUT END ---")
         
         # 5. Generate Artifacts
         end_time = datetime.now()
@@ -149,7 +153,7 @@ async def run_adapter():
         
         print(f"Generated patch: size={len(patch_content)} characters")
         if len(patch_content) > 0:
-            print(f"Patch preview: {patch_content[:200]}")
+            print(f"Patch preview: {patch_content[:500]}")
         
         # Manifest
         manifest = {
@@ -175,8 +179,15 @@ async def run_adapter():
             f.write(patch_content)
             
         with open(os.path.join(output_dir, "summary.md"), 'w') as f:
-            f.write(f"# Task Summary\n\nGoal: {goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n")
+            summary_text = f"# Task Summary\n\nGoal: {goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n"
+            f.write(summary_text)
+            print("--- SUMMARY START ---")
+            print(summary_text)
+            print("--- SUMMARY END ---")
 
+        print("--- GIT STATUS ---")
+        subprocess.run(["git", "status"], check=False)
+        print("------------------")
         print(f"Artifacts written to {output_dir}")
         
     except Exception as e:
