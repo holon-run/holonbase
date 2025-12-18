@@ -58,7 +58,9 @@ async def run_adapter():
         "4. Your goal is as follows:\n\n"
     )
     
-    full_prompt = system_instruction + goal
+    # Goal might have escaped newlines
+    clean_goal = str(goal).replace('\\n', '\n')
+    full_prompt = system_instruction + clean_goal
     if context_content:
         full_prompt += context_header + context_content
 
@@ -78,6 +80,9 @@ async def run_adapter():
     if not has_git:
         print("No git repo found in workspace. Initializing temporary baseline...")
         subprocess.run(["git", "init"], check=True)
+        # Add basic ignores to avoid bloating patches
+        with open(".gitignore", "a") as f:
+            f.write("\n__pycache__/\n*.pyc\n*.pyo\n.DS_Store\n")
         subprocess.run(["git", "add", "-A"], check=True)
         subprocess.run(["git", "commit", "-m", "holon-baseline"], check=True)
     else:
@@ -159,13 +164,15 @@ async def run_adapter():
         duration = (end_time - start_time).total_seconds()
         
         # Diff Patch: Ensure we see new files
-        subprocess.run(["git", "add", "."], capture_output=True)
-        diff_proc = subprocess.run(["git", "diff", "--staged", "--patch"], capture_output=True, text=True)
+        # Exclude common cache directories from being added
+        subprocess.run(["git", "add", ".", ":!**/__pycache__/**", ":!**/*.pyc", ":!**/*.pyo"], capture_output=True)
+        # Generate patch with binary support just in case
+        diff_proc = subprocess.run(["git", "diff", "--staged", "--patch", "--binary"], capture_output=True, text=True)
         patch_content = diff_proc.stdout
         
         # Check if patch is empty
         if not patch_content.strip():
-            diff_proc = subprocess.run(["git", "diff", "--patch"], capture_output=True, text=True)
+            diff_proc = subprocess.run(["git", "diff", "--patch", "--binary"], capture_output=True, text=True)
             patch_content = diff_proc.stdout
             
         print(f"Generated patch: size={len(patch_content)} characters")
@@ -194,8 +201,6 @@ async def run_adapter():
             f.write(patch_content)
             
         with open(os.path.join(output_dir, "summary.md"), 'w') as f:
-            # goal might contain escaped newlines if it comes from YAML
-            clean_goal = str(goal).replace('\\n', '\n')
             summary_text = f"# Task Summary\n\nGoal: {clean_goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n"
             f.write(summary_text)
 
