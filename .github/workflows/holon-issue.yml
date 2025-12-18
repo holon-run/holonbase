@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -f holon-out/diff.patch ]; then
+          if [ -s holon-out/diff.patch ]; then
             ISSUE_NUMBER="${{ github.event.issue.number }}"
             BRANCH_NAME="holon/fix-issue-${ISSUE_NUMBER}"
             
