@@ -163,17 +163,17 @@ async def run_adapter():
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         
-        # Diff Patch: Ensure we see new files
-        # Exclude common cache directories from being added
-        subprocess.run(["git", "add", ".", ":!**/__pycache__/**", ":!**/*.pyc", ":!**/*.pyo"], capture_output=True)
-        # Generate patch with binary support just in case
-        diff_proc = subprocess.run(["git", "diff", "--staged", "--patch", "--binary"], capture_output=True, text=True)
+        # Diff Patch: stage changes so new files are included.
+        # We rely on `.gitignore` to exclude transient artifacts (e.g. __pycache__/*.pyc).
+        subprocess.run(["git", "add", "-A"], capture_output=True)
+
+        # Generate patch with binary support. `git apply` requires full index lines for binary patches.
+        diff_proc = subprocess.run(
+            ["git", "diff", "--cached", "--patch", "--binary", "--full-index"],
+            capture_output=True,
+            text=True,
+        )
         patch_content = diff_proc.stdout
-        
-        # Check if patch is empty
-        if not patch_content.strip():
-            diff_proc = subprocess.run(["git", "diff", "--patch", "--binary"], capture_output=True, text=True)
-            patch_content = diff_proc.stdout
             
         print(f"Generated patch: size={len(patch_content)} characters")
         

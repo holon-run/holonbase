@@ -36,6 +36,7 @@ COPY .claude.json /root/.claude.json
 # Default environment variables
 ENV IS_SANDBOX=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Run the adapter
 ENTRYPOINT ["python3", "adapter.py"]
