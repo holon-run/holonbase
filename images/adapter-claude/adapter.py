@@ -49,7 +49,16 @@ async def run_adapter():
                     content = f.read()
                     context_content += f"\nFile: {file_name}\n---\n{content}\n---\n"
     
-    full_prompt = goal
+    # CRITICAL: Instruct the agent to stay in /workspace and use relative paths
+    system_instruction = (
+        "IMPORTANT: You are running in a sandbox environment at /workspace.\n"
+        "1. Always use relative paths for files (e.g., 'file.txt' instead of '/file.txt').\n"
+        "2. All your changes MUST be made inside the current directory /workspace.\n"
+        "3. Do not use absolute paths starting with '/'.\n"
+        "4. Your goal is as follows:\n\n"
+    )
+    
+    full_prompt = system_instruction + goal
     if context_content:
         full_prompt += context_header + context_content
 
@@ -57,10 +66,10 @@ async def run_adapter():
     workspace_path = "/workspace"
     os.chdir(workspace_path)
     
-    # Force IS_SANDBOX
+    # Force IS_SANDBOX for Claude Code
     os.environ["IS_SANDBOX"] = "1"
     
-    # Fix dubious ownership error for git in container (host mounted dir)
+    # Fix dubious ownership and set global user for git
     subprocess.run(["git", "config", "--global", "--add", "safe.directory", "/workspace"], check=False)
     subprocess.run(["git", "config", "--global", "user.name", "holon-adapter"], check=False)
     subprocess.run(["git", "config", "--global", "user.email", "adapter@holon.local"], check=False)
@@ -138,8 +147,8 @@ async def run_adapter():
                             print(f"  TEXT: {block.text[:100]}...")
                         elif isinstance(block, ToolUseBlock):
                             print(f"  TOOL USE: {block.name}({block.input})")
-                        else:
-                            print(f"  BLOCK: {type(block).__name__}")
+                            # If the SDK doesn't auto-execute, we might need a loop here.
+                            # But usually SDK's query() + receive_response handles it if configured.
                 elif isinstance(msg, ResultMessage):
                     print(f"Task result: {msg.subtype}, is_error: {msg.is_error}")
                     if msg.is_error:
@@ -156,25 +165,25 @@ async def run_adapter():
         duration = (end_time - start_time).total_seconds()
         
         print("--- FS STATE CHECK ---")
-        if not os.path.exists(os.path.join(workspace_path, "holon-intro.txt")):
-            print("NOT FOUND holon-intro.txt in /workspace. Searching container...")
-            subprocess.run(["find", "/", "-name", "holon-intro.txt"], check=False)
-        else:
-            print("FOUND holon-intro.txt in /workspace")
-            
-        print("--- GIT STATUS ---")
-        st_proc = subprocess.run(["git", "status"], capture_output=True, text=True)
-        print(st_proc.stdout)
-        print(st_proc.stderr)
+        subprocess.run(["ls", "-la", workspace_path], check=False)
         
         # Diff Patch: Ensure we see new files
-        subprocess.run(["git", "add", "-N", "."], capture_output=True)
-        diff_proc = subprocess.run(["git", "diff", "--patch"], capture_output=True, text=True)
+        # We use 'git add -A' to actually stage changes, then 'git diff --cached' might be safer
+        # or just 'git add -N .' and 'git diff'. 
+        # But 'git add .' followed by 'git diff --staged' is most reliable for new files.
+        subprocess.run(["git", "add", "."], capture_output=True)
+        diff_proc = subprocess.run(["git", "diff", "--staged", "--patch"], capture_output=True, text=True)
         patch_content = diff_proc.stdout
         
+        # Check if patch is empty
+        if not patch_content.strip():
+            # Try non-staged diff just in case
+            diff_proc = subprocess.run(["git", "diff", "--patch"], capture_output=True, text=True)
+            patch_content = diff_proc.stdout
+            
         print(f"Generated patch: size={len(patch_content)} characters")
         if len(patch_content) > 0:
-            print(f"Patch preview:\n{patch_content[:500]}")
+            print(f"Patch preview:\n{patch_content[:1000]}")
         
         # Manifest
         manifest = {
