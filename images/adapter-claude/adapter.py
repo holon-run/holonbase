@@ -140,6 +140,10 @@ async def run_adapter():
             log_file.write(f"--- FINAL OUTPUT ---\n{result}\n")
 
         print(f"Claude Code execution finished. Success: {success}")
+        print("--- AGENT OUTPUT ---")
+        print(result)
+        print("--- GIT STATUS ---")
+        subprocess.run(["git", "status"], check=False)
         
         # 5. Generate Artifacts
         end_time = datetime.now()
