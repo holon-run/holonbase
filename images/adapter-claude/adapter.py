@@ -86,6 +86,8 @@ async def run_adapter():
                 env_section["ANTHROPIC_API_KEY"] = auth_token
             if base_url:
                 env_section["ANTHROPIC_BASE_URL"] = base_url
+                env_section["ANTHROPIC_API_URL"] = base_url
+                env_section["CLAUDE_CODE_API_URL"] = base_url
             
             settings["env"] = env_section
             
@@ -121,26 +123,29 @@ async def run_adapter():
             
             final_output = ""
             async for msg in client.receive_response():
-                # print(f"Received message type: {type(msg).__name__}")
+                print(f"RECEIVED MESSAGE: {type(msg).__name__}")
                 log_file.write(f"Message: {msg}\n")
                 
                 if isinstance(msg, AssistantMessage):
                     for block in msg.content:
                         if isinstance(block, TextBlock):
                             final_output += block.text
+                            print(f"  TEXT: {block.text[:100]}...")
+                        else:
+                            print(f"  BLOCK: {type(block).__name__}")
                 elif isinstance(msg, ResultMessage):
                     print(f"Task result: {msg.subtype}, is_error: {msg.is_error}")
                     if msg.is_error:
                         success = False
                     break
+                else:
+                    # Log other message types for debugging
+                    pass
             
             result = final_output
             log_file.write(f"--- FINAL OUTPUT ---\n{result}\n")
 
         print(f"Claude Code execution finished. Success: {success}")
-        print("--- AGENT OUTPUT START ---")
-        print(result)
-        print("--- AGENT OUTPUT END ---")
         
         # 5. Generate Artifacts
         end_time = datetime.now()
@@ -153,7 +158,7 @@ async def run_adapter():
         
         print(f"Generated patch: size={len(patch_content)} characters")
         if len(patch_content) > 0:
-            print(f"Patch preview: {patch_content[:500]}")
+            print(f"Patch preview:\n{patch_content[:500]}")
         
         # Manifest
         manifest = {
@@ -181,12 +186,11 @@ async def run_adapter():
         with open(os.path.join(output_dir, "summary.md"), 'w') as f:
             summary_text = f"# Task Summary\n\nGoal: {goal}\n\nOutcome: {'Success' if success else 'Failure'}\n\n## Actions\n{result}\n"
             f.write(summary_text)
-            print("--- SUMMARY START ---")
-            print(summary_text)
-            print("--- SUMMARY END ---")
 
         print("--- GIT STATUS ---")
-        subprocess.run(["git", "status"], check=False)
+        st_proc = subprocess.run(["git", "status"], capture_output=True, text=True)
+        print(st_proc.stdout)
+        print(st_proc.stderr)
         print("------------------")
         print(f"Artifacts written to {output_dir}")
         
