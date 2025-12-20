@@ -12,6 +12,7 @@ import (
 var specPath string
 var goalStr string
 var taskName string
+var baseImage string
 var adapterImage string
 var workspacePath string
 var contextPath string
@@ -35,6 +36,7 @@ var runCmd = &cobra.Command{
 			SpecPath:      specPath,
 			GoalStr:       goalStr,
 			TaskName:      taskName,
+			BaseImage:     baseImage,
 			AdapterImage:  adapterImage,
 			WorkspacePath: workspacePath,
 			ContextPath:   contextPath,
@@ -55,7 +57,8 @@ func init() {
 	runCmd.Flags().StringVarP(&specPath, "spec", "s", "", "Path to holon spec file")
 	runCmd.Flags().StringVarP(&goalStr, "goal", "g", "", "Goal description (alternative to --spec)")
 	runCmd.Flags().StringVarP(&taskName, "name", "n", "", "Task name (optional, defaults to auto-generated)")
-	runCmd.Flags().StringVarP(&adapterImage, "image", "i", "golang:1.22", "Docker image for execution (Base toolchain)")
+	runCmd.Flags().StringVarP(&baseImage, "image", "i", "golang:1.22", "Docker image for execution (Base toolchain)")
+	runCmd.Flags().StringVar(&adapterImage, "adapter-image", "holon-adapter-claude", "Docker image containing the Holon adapter (e.g. holon-adapter-claude)")
 	runCmd.Flags().StringVarP(&workspacePath, "workspace", "w", ".", "Path to workspace")
 	runCmd.Flags().StringVarP(&contextPath, "context", "c", "", "Path to context directory")
 	runCmd.Flags().StringVarP(&outDir, "out", "o", "./holon-output", "Path to output directory")

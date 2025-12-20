@@ -24,6 +24,7 @@ type RunnerConfig struct {
 	SpecPath      string
 	GoalStr       string
 	TaskName      string
+	BaseImage     string
 	AdapterImage  string
 	WorkspacePath string
 	ContextPath   string
@@ -158,25 +159,34 @@ output:
 		return err
 	}
 	defer os.RemoveAll(promptTempDir)
+	absPromptTempDir, err := filepath.Abs(promptTempDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve prompt temp dir: %w", err)
+	}
 
 	// Write debug prompts to output directory
 	if err := r.writeDebugPrompts(absOut, sysPrompt, userPrompt); err != nil {
 		fmt.Printf("Warning: Failed to write debug prompts: %v\n", err)
 	}
 
+	adapterImage := cfg.AdapterImage
+	if adapterImage == "" {
+		adapterImage = "holon-adapter-claude"
+	}
+
 	containerCfg := &docker.ContainerConfig{
-		BaseImage:      cfg.AdapterImage,
-		AdapterImage:   "holon-adapter-claude",
+		BaseImage:      cfg.BaseImage,
+		AdapterImage:   adapterImage,
 		Workspace:      absWorkspace,
 		SpecPath:       absSpec,
 		ContextPath:    absContext,
-		PromptPath:     filepath.Join(promptTempDir, "system.md"),
-		UserPromptPath: filepath.Join(promptTempDir, "user.md"),
+		PromptPath:     filepath.Join(absPromptTempDir, "system.md"),
+		UserPromptPath: filepath.Join(absPromptTempDir, "user.md"),
 		OutDir:         absOut,
 		Env:            envVars,
 	}
 
-	fmt.Printf("Running Holon: %s with base image %s\n", cfg.SpecPath, cfg.AdapterImage)
+	fmt.Printf("Running Holon: %s with base image %s (adapter: %s)\n", cfg.SpecPath, cfg.BaseImage, containerCfg.AdapterImage)
 	if err := r.runtime.RunHolon(ctx, containerCfg); err != nil {
 		return fmt.Errorf("execution failed: %w", err)
 	}
