@@ -10,6 +10,7 @@ import json
 import asyncio
 import subprocess
 import glob
+import time
 from datetime import datetime
 from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -147,6 +148,15 @@ def fix_permissions(directory, logger=None):
             import sys
             print(f"Warning: Failed to fix permissions: {e}", file=sys.stderr)
 
+def _int_env(name, default):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
 async def run_adapter():
     # Get log level from environment, default to progress
     log_level = os.environ.get("LOG_LEVEL", "progress")
@@ -278,6 +288,10 @@ async def run_adapter():
 
     from claude_agent_sdk.types import AssistantMessage, TextBlock, ResultMessage, ToolUseBlock
     
+    # Optional model override for deterministic CI.
+    model = os.environ.get("HOLON_MODEL")
+    fallback_model = os.environ.get("HOLON_FALLBACK_MODEL")
+
     # Append system instructions to Claude Code's default system prompt
     # Using preset="claude_code" preserves Claude's internal tools and instructions
     # append adds our custom rules on top
@@ -287,7 +301,9 @@ async def run_adapter():
         system_prompt={
             "preset": "claude_code",
             "append": system_instruction
-        }
+        },
+        model=model,
+        fallback_model=fallback_model,
     )
     client = ClaudeSDKClient(options=options)
     
@@ -306,16 +322,58 @@ async def run_adapter():
         with open(log_file_path, 'w') as log_file:
             logger.minimal("Executing query...")
             # Run the query with user message only (system prompt is set via options)
-            await client.query(user_msg)
+            query_timeout_s = _int_env("HOLON_QUERY_TIMEOUT_SECONDS", 300)
+            if query_timeout_s > 0:
+                await asyncio.wait_for(client.query(user_msg), timeout=query_timeout_s)
+            else:
+                await client.query(user_msg)
             logger.minimal("Query sent. Waiting for response stream...")
 
             final_output = ""
             msg_count = 0
-            async for msg in client.receive_response():
+            response_stream = client.receive_response()
+            heartbeat_s = _int_env("HOLON_HEARTBEAT_SECONDS", 60)
+            idle_timeout_s = _int_env("HOLON_RESPONSE_IDLE_TIMEOUT_SECONDS", 1800)
+            total_timeout_s = _int_env("HOLON_RESPONSE_TOTAL_TIMEOUT_SECONDS", 7200)
+            start_time_mono = time.monotonic()
+            last_msg_time = start_time_mono
+
+            if heartbeat_s > 0:
+                logger.minimal(
+                    "Response stream heartbeat enabled: "
+                    f"interval={heartbeat_s}s idle_timeout={idle_timeout_s}s total_timeout={total_timeout_s}s"
+                )
+
+            while True:
+                try:
+                    if heartbeat_s > 0:
+                        msg = await asyncio.wait_for(response_stream.__anext__(), timeout=heartbeat_s)
+                    else:
+                        msg = await response_stream.__anext__()
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    now = time.monotonic()
+                    idle_for = now - last_msg_time
+                    total_for = now - start_time_mono
+                    logger.minimal(
+                        f"No response yet (idle {idle_for:.0f}s, total {total_for:.0f}s)..."
+                    )
+                    if idle_timeout_s > 0 and idle_for >= idle_timeout_s:
+                        raise TimeoutError(
+                            f"No response for {idle_for:.0f}s (idle timeout {idle_timeout_s}s)"
+                        )
+                    if total_timeout_s > 0 and total_for >= total_timeout_s:
+                        raise TimeoutError(
+                            f"Response stream exceeded {total_timeout_s}s total timeout"
+                        )
+                    continue
+
+                last_msg_time = time.monotonic()
                 msg_count += 1
                 # Always log the message type for progress visibility
                 msg_type = type(msg).__name__
-                if msg_count % 5 == 0 or msg_type == "ResultMessage":
+                if msg_type == "ResultMessage":
                     logger.debug(f"Received message #{msg_count}: {msg_type}")
                 
                 log_file.write(f"Message: {msg}\n")
