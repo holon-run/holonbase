@@ -82,11 +82,20 @@ runs:
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
       run: |
+        ADAPTER_IMAGE="${HOLON_ADAPTER_IMAGE:-holon-adapter-claude}"
         # Build holon and adapter if not present
         if [ ! -f bin/holon ]; then
           make build
         fi
-        make build-adapter-image
+        if [ "$ADAPTER_IMAGE" = "holon-adapter-claude-ts" ]; then
+          echo "Building TypeScript adapter image..."
+          docker build -t "$ADAPTER_IMAGE" ./images/adapter-claude-ts
+        elif [ -z "${HOLON_ADAPTER_IMAGE:-}" ] || [ "$ADAPTER_IMAGE" = "holon-adapter-claude" ]; then
+          echo "Building default adapter image..."
+          make build-adapter-image
+        else
+          echo "Using custom adapter image '$ADAPTER_IMAGE' (no local build performed)."
+        fi
 
         # Extract issue info from event
         if [ -f "$GITHUB_EVENT_PATH" ]; then
@@ -95,7 +104,7 @@ runs:
 
           if [ -n "$TITLE" ]; then
             GOAL="Issue Title: $TITLE\n\nIssue Description:\n$BODY"
-            ./bin/holon run --goal "$GOAL" --image "${{ inputs.image }}" --workspace "${{ inputs.workspace }}" --out "${{ inputs.out_dir }}" --log-level "${{ inputs.log_level }}"
+            ./bin/holon run --goal "$GOAL" --image "${{ inputs.image }}" --adapter-image "$ADAPTER_IMAGE" --workspace "${{ inputs.workspace }}" --out "${{ inputs.out_dir }}" --log-level "${{ inputs.log_level }}"
           else
             echo "Not an issue event or title is empty."
             exit 1
