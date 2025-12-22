@@ -25,6 +25,25 @@
 - TypeScript agent: keep changes minimal and deterministic; avoid committing `node_modules/` and `dist/` (maintain `.gitignore`).
 - Files/paths: prefer explicit, stable artifact names in `holon-output/` (e.g., `diff.patch`, `summary.md`).
 
+## Go Error Handling Requirements
+
+**CRITICAL**: Never ignore returned errors in Go code unless absolutely necessary.
+
+- **Always handle errors**: Every function returning `(result, error)` must check the error
+- **No error ignoring**: Never use `err, _` unless you add a comment explaining why
+- **Proper error wrapping**: Use `fmt.Errorf("context: %w", err)` to add context
+
+**Example:**
+```go
+data, err := os.ReadFile(filename)
+if err != nil {
+    return "", fmt.Errorf("failed to read file %s: %w", filename, err)
+}
+
+// Best-effort cleanup: failure to remove temp file is not critical
+_ = os.Remove(tempFile)
+```
+
 ## Testing Guidelines
 
 - Go unit tests live alongside packages as `*_test.go`.
