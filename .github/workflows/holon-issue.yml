@@ -46,9 +46,10 @@ jobs:
             git config --local user.email "bot@holon.run"
             git config --local user.name "holonbot"
             
-            # Debug: Check who we are authenticated as (App friendly endpoint)
-            echo "Debug: Checking App Installation status..."
-            GH_TOKEN=$GH_TOKEN gh api installation/repositories
+            # Remove the default header which contains the GITHUB_TOKEN
+            # This is crucial because even if we set a new remote URL, this header might take precedence
+            git config --local --unset-all http.https://github.com/.extraheader
+            
             echo "Debug: Checking token scopes..."
             GH_TOKEN=$GH_TOKEN gh api meta -i
             
