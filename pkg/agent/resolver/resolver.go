@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/holon-run/holon/pkg/agent"
 	"github.com/holon-run/holon/pkg/agent/cache"
 )
 
@@ -57,40 +58,49 @@ func NewRegistry(cacheDir string) *Registry {
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	// Create a single HTTP resolver that can be reused by BuiltinResolver
+	httpResolver := &HTTPResolver{
+		cache: cache,
+		client: &http.Client{
+			// Overall timeout for the entire request (including redirects, download, etc.)
+			// Set higher to accommodate slow downloads and network issues
+			Timeout: 300 * time.Second, // 5 minutes total timeout
+
+			// Use custom transport with granular timeout controls
+			Transport: transport,
+
+			// Redirect handling
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// Enforce a maximum number of redirects to avoid redirect loops
+				const maxRedirects = 10
+				if len(via) >= maxRedirects {
+					return fmt.Errorf("stopped after %d redirects", maxRedirects)
+				}
+
+				// Only allow redirects to HTTP or HTTPS endpoints
+				if req.URL != nil && req.URL.Scheme != "" {
+					scheme := strings.ToLower(req.URL.Scheme)
+					if scheme != "http" && scheme != "https" {
+						return fmt.Errorf("redirect to unsupported scheme: %s", req.URL.Scheme)
+					}
+				}
+
+				return nil
+			},
+		},
+	}
+
+	// Create builtin resolver that reuses the HTTP resolver
+	builtinResolver := &BuiltinResolver{
+		httpResolver: httpResolver,
+	}
+
 	return &Registry{
 		cache: cache,
 		resolvers: []Resolver{
 			&FileResolver{},
-			&HTTPResolver{
-				cache: cache,
-				client: &http.Client{
-					// Overall timeout for the entire request (including redirects, download, etc.)
-					// Set higher to accommodate slow downloads and network issues
-					Timeout: 300 * time.Second, // 5 minutes total timeout
-
-					// Use custom transport with granular timeout controls
-					Transport: transport,
-
-					// Redirect handling
-					CheckRedirect: func(req *http.Request, via []*http.Request) error {
-						// Enforce a maximum number of redirects to avoid redirect loops
-						const maxRedirects = 10
-						if len(via) >= maxRedirects {
-							return fmt.Errorf("stopped after %d redirects", maxRedirects)
-						}
-
-						// Only allow redirects to HTTP or HTTPS endpoints
-						if req.URL != nil && req.URL.Scheme != "" {
-							scheme := strings.ToLower(req.URL.Scheme)
-							if scheme != "http" && scheme != "https" {
-								return fmt.Errorf("redirect to unsupported scheme: %s", req.URL.Scheme)
-							}
-						}
-
-						return nil
-					},
-				},
-			},
+			builtinResolver, // Builtin resolver should be checked before HTTP/URL resolvers
+			httpResolver,    // Reuse the same HTTP resolver instance
 			&AliasResolver{
 				cache: cache,
 			},
@@ -329,3 +339,36 @@ func (r *AliasResolver) Resolve(ctx context.Context, ref string) (string, error)
 
 	return httpResolver.Resolve(ctx, url)
 }
+
+// BuiltinResolver resolves the builtin default agent
+type BuiltinResolver struct {
+	httpResolver *HTTPResolver
+}
+
+func (r *BuiltinResolver) CanResolve(ref string) bool {
+	// Don't resolve if auto-install is disabled
+	if agent.IsAutoInstallDisabled() {
+		return false
+	}
+
+	// Resolve empty string (no agent specified) and "default" alias
+	ref = strings.TrimSpace(ref)
+	return ref == "" || ref == "default"
+}
+
+func (r *BuiltinResolver) Resolve(ctx context.Context, ref string) (string, error) {
+	if !r.CanResolve(ref) {
+		return "", fmt.Errorf("builtin resolver cannot handle reference: %s", ref)
+	}
+
+	builtinAgent := agent.DefaultBuiltinAgent()
+	if builtinAgent == nil {
+		return "", fmt.Errorf("no builtin agent configured")
+	}
+
+	// Resolve the builtin agent URL with checksum - fix double prefix issue
+	checksum := strings.TrimPrefix(builtinAgent.Checksum, "sha256=")
+	agentURL := builtinAgent.URL + "#sha256=" + checksum
+	return r.httpResolver.Resolve(ctx, agentURL)
+}
+

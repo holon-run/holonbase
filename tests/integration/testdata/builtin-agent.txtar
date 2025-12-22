@@ -1,0 +1,25 @@
+# Test builtin agent info command
+exec holon agent info default
+stdout 'Builtin Default Agent:'
+stdout 'Name:.*claude-agent'
+stdout 'Version:.*agent-claude-v0.2.0'
+stdout 'Auto-install: ENABLED'
+
+# Test builtin agent info with auto-install disabled
+env HOLON_NO_AUTO_INSTALL=1
+exec holon agent info default
+stdout 'Auto-install: DISABLED'
+
+# Test that default agent is tried when no agent specified
+# This should attempt to download the builtin agent and fail gracefully
+! exec holon run --goal "test goal" --workspace /tmp
+stdout 'No agent specified, trying builtin default agent'
+stdout 'Builtin agent not available'
+
+# Test with explicit default agent
+! exec holon run --agent default --goal "test goal" --workspace /tmp
+stderr 'failed to resolve agent bundle'
+
+# Test that auto-install can be disabled
+! exec holon run --goal "test goal" --workspace /tmp
+stderr 'agent bundle not found; set --agent/HOLON_AGENT'
