@@ -46,9 +46,9 @@ jobs:
             git config --local user.email "bot@holon.run"
             git config --local user.name "holonbot"
             
-            # Debug: Check who we are authenticated as
-            echo "Debug: Checking authentication status..."
-            GH_TOKEN=$GH_TOKEN gh api user
+            # Debug: Check who we are authenticated as (App friendly endpoint)
+            echo "Debug: Checking App Installation status..."
+            GH_TOKEN=$GH_TOKEN gh api installation/repositories
             echo "Debug: Checking token scopes..."
             GH_TOKEN=$GH_TOKEN gh api meta -i
             
