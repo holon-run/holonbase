@@ -260,38 +260,21 @@ jobs:
           PR_NUMBER="${{ needs.parse-and-gate.outputs.pr_number }}"
           OUTCOME="${{ steps.holon.outcome }}"
 
-          # Create a temporary file for the comment body
-          BODY_FILE="$(mktemp)"
-
+          # Create a simple status comment (detailed summary will be posted by Publisher)
           if [ "$OUTCOME" = "success" ]; then
-            cat >"$BODY_FILE" <<EOF
-          ## ✅ Holon Fix Complete
+            BODY="## ✅ Holon Fix Complete
 
-          I've successfully analyzed and processed your fix request for PR #${PR_NUMBER}.
+          I've successfully processed your fix request for PR #${PR_NUMBER}.
 
           **Status**: Success
           **Triggered by**: @${{ github.actor }}
           **Task**: ${{ steps.task-extraction.outputs.goal }}
 
-          EOF
-
-            # Add summary if available
-            if [ -f /tmp/holon-output/summary.md ]; then
-              cat >>"$BODY_FILE" <<'EOF'
-          **Summary**:
-          EOF
-              cat /tmp/holon-output/summary.md >>"$BODY_FILE"
-              echo >>"$BODY_FILE"
-              echo >>"$BODY_FILE"
-            fi
-
-            cat >>"$BODY_FILE" <<'EOF'
+          A detailed summary will be posted separately.
           ---
-          *Processed by Holon*
-          EOF
+          *Processed by Holon*"
           else
-            cat >"$BODY_FILE" <<EOF
-          ## ❌ Holon Fix Failed
+            BODY="## ❌ Holon Fix Failed
 
           I encountered an error while processing your fix request for PR #${PR_NUMBER}.
 
@@ -300,17 +283,12 @@ jobs:
           **Task**: ${{ steps.task-extraction.outputs.goal }}
 
           Please check the workflow logs for more details.
-
           ---
-          *Processed by Holon*
-          EOF
+          *Processed by Holon*"
           fi
 
-          # Post comment using the file
-          gh issue comment "$PR_NUMBER" --body-file "$BODY_FILE"
-
-          # Clean up temporary file
-          rm -f "$BODY_FILE"
+          # Post comment
+          gh issue comment "$PR_NUMBER" --body "$BODY"
         env:
           GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
