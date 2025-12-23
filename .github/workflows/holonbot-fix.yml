@@ -94,10 +94,10 @@ jobs:
           fi
 
           # Gate 4: Check if commenter has write or maintain permissions
-          PERMS=$(gh api user/${ACTOR} --jq '.permissions' 2>/dev/null || echo '{}')
+          PERMS=$(gh api "user/${ACTOR}" --jq '.permissions' 2>/dev/null || echo '{}')
           CAN_WRITE=$(echo "$PERMS" | jq -r '.push // false' 2>/dev/null || echo 'false')
           CAN_MAINTAIN=$(echo "$PERMS" | jq -r '.maintain // false' 2>/dev/null || echo 'false')
-          IS_COLLABORATOR=$(gh api repos/${{ github.repository }}/collaborators/${ACTOR} --jq '.' 2>/dev/null && echo 'true' || echo 'false')
+          IS_COLLABORATOR=$(gh api "repos/${{ github.repository }}/collaborators/${ACTOR}" --jq '.' 2>/dev/null && echo 'true' || echo 'false')
 
           if [ "$CAN_WRITE" = "true" ] || [ "$CAN_MAINTAIN" = "true" ] || [ "$IS_COLLABORATOR" = "true" ]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
