@@ -22,6 +22,7 @@ jobs:
     outputs:
       should_run: ${{ steps.decision.outputs.should_run }}
       pr_number: ${{ steps.pr-check.outputs.pr_number }}
+      pr_branch: ${{ steps.pr-check.outputs.pr_branch }}
       reason: ${{ steps.decision.outputs.reason }}
       issue_number: ${{ steps.decision.outputs.issue_number }}
     steps:
