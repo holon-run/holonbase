@@ -31,8 +31,10 @@ jobs:
       - name: Check if comment is on a PR
         id: pr-check
         run: |
-          # Check if the issue is a pull request
-          if gh pr view "${{ github.event.issue.number }}" --json baseRefName,headRefName,baseRepository,headRepository --jq 'baseRefName' 2>/dev/null; then
+          # In issue_comment events, if the issue is a PR, the payload will contain
+          # the issue.pull_request field. We can check this directly from the event context.
+          # This is more reliable than calling gh pr view.
+          if [ "${{ github.event.issue.pull_request }}" != "" ]; then
             echo "is_pull_request=true" >> $GITHUB_OUTPUT
             echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
             echo "Found PR #${{ github.event.issue.number }}"
@@ -160,7 +162,7 @@ jobs:
             }
           ' || echo "Failed to add reaction"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
 
       - name: Prepare PR context
         id: prepare-context
@@ -178,7 +180,7 @@ jobs:
             --owner "${{ github.repository_owner }}" \
             --repo "${{ github.event.repository.name }}" \
             --pr "${{ needs.parse-and-gate.outputs.pr_number }}" \
-            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --token "${{ secrets.GH_PAT || github.token }}" \
             --out "./holon-input/context" \
             --include-diff \
             --unresolved-only=false
@@ -186,7 +188,7 @@ jobs:
           echo "Context preparation complete!"
           ls -la holon-input/context/github/
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
 
       - name: Run Holon
         id: holon
@@ -227,7 +229,7 @@ jobs:
 
           gh api graphql -f query="mutation { addReaction(input: {subjectId: \"${{ github.event.comment.node_id }}\", content: $REACTION}) { reaction { content } } }" || echo "Failed to add final reaction"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
       - name: Create comment with results
         if: always()
@@ -287,7 +289,7 @@ jobs:
           # Clean up temporary file
           rm -f "$BODY_FILE"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
       - name: Apply changes to PR branch
         if: success() && steps.holon.outputs.diff_exists == 'true'
@@ -304,7 +306,7 @@ jobs:
           git config --local --unset-all http.https://github.com/.extraheader || true
 
           # Set up authentication with proper token
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}@github.com/${{ github.repository }}.git"
 
           # Switch to the PR branch
           git checkout "$BRANCH_NAME" || git checkout -b "$BRANCH_NAME" origin/"$BRANCH_NAME"
@@ -327,7 +329,7 @@ jobs:
             echo "No diff.patch found or empty - no changes to apply"
           fi
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
       - name: Setup Node.js for Publisher
         if: always()
@@ -350,7 +352,7 @@ jobs:
             --repo "${{ github.event.repository.name }}" \
             --pr "${{ needs.parse-and-gate.outputs.pr_number }}" \
             --output "../holon-output" \
-            --token "${{ secrets.GITHUB_TOKEN }}"
+            --token "${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}"
 
       - name: Post Summary to GitHub Actions
         if: always()
