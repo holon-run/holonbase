@@ -357,11 +357,8 @@ jobs:
       - name: Publish Holon Results
         if: always()
         run: |
-          # Switch back to main branch first (PR branch doesn't have holonbot/bin/ because it's in .gitignore)
-          git checkout main || git checkout ${{ github.ref_name }}
-
           cd holonbot
-          node ./bin/publisher.js \
+          node publisher-cli.js \
             --owner "${{ github.repository_owner }}" \
             --repo "${{ github.event.repository.name }}" \
             --pr "${{ needs.parse-and-gate.outputs.pr_number }}" \
