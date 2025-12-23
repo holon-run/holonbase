@@ -133,17 +133,40 @@ jobs:
           echo "📝 Issue: #${{ needs.parse-and-gate.outputs.issue_number }}"
           echo "👤 Triggered by: ${{ github.actor }}"
 
-      - name: Checkout Code
+      - name: Checkout main branch for building holon
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-          ref: "refs/heads/${{ needs.parse-and-gate.outputs.pr_branch }}"
+          ref: main
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+
+      - name: Build holon on main branch
+        run: |
+          echo "Building holon from main branch..."
+          make build
+          echo "✅ Holon built successfully"
+          # Save the compiled holon binary
+          cp bin/holon /tmp/holon-binary
+          echo "✅ Holon binary saved to /tmp/holon-binary"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: "refs/heads/${{ needs.parse-and-gate.outputs.pr_branch }}"
+          clean: false
+
+      - name: Restore holon binary
+        run: |
+          cp /tmp/holon-binary ./bin/holon
+          echo "✅ Holon binary restored from /tmp/holon-binary"
+          ./bin/holon version || echo "Binary verification"
 
       - name: Extract task description from comment
         id: task-extraction
@@ -188,11 +211,6 @@ jobs:
           # Create output directory in /tmp as well
           OUTPUT_DIR="/tmp/holon-output"
           mkdir -p "$OUTPUT_DIR"
-
-          # Build holon if not present
-          if [ ! -f bin/holon ]; then
-            make build
-          fi
 
           # Collect PR context using the new context command
           ./bin/holon context collect-pr \
