@@ -176,6 +176,10 @@ jobs:
           CONTEXT_DIR="/tmp/holon-context"
           mkdir -p "$CONTEXT_DIR"
 
+          # Create output directory in /tmp as well
+          OUTPUT_DIR="/tmp/holon-output"
+          mkdir -p "$OUTPUT_DIR"
+
           # Build holon if not present
           if [ ! -f bin/holon ]; then
             make build
@@ -194,8 +198,9 @@ jobs:
           echo "Context preparation complete!"
           ls -la "$CONTEXT_DIR/github/"
 
-          # Save context directory path for next step
+          # Save directory paths for next step
           echo "context_dir=$CONTEXT_DIR" >> $GITHUB_OUTPUT
+          echo "output_dir=$OUTPUT_DIR" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
 
@@ -214,7 +219,7 @@ jobs:
           spec: ''
           workspace: '.'
           context: '${{ steps.prepare-context.outputs.context_dir }}'
-          out_dir: './holon-output'
+          out_dir: '${{ steps.prepare-context.outputs.output_dir }}'
 
       - name: Update reaction based on result
         if: always()
@@ -262,11 +267,11 @@ jobs:
           EOF
 
             # Add summary if available
-            if [ -f holon-output/summary.md ]; then
+            if [ -f /tmp/holon-output/summary.md ]; then
               cat >>"$BODY_FILE" <<'EOF'
           **Summary**:
           EOF
-              cat holon-output/summary.md >>"$BODY_FILE"
+              cat /tmp/holon-output/summary.md >>"$BODY_FILE"
               echo >>"$BODY_FILE"
               echo >>"$BODY_FILE"
             fi
@@ -321,9 +326,9 @@ jobs:
           git checkout "$BRANCH_NAME" || git checkout -b "$BRANCH_NAME" origin/"$BRANCH_NAME"
 
           # Apply the generated changes
-          if [ -s holon-output/diff.patch ]; then
+          if [ -s /tmp/holon-output/diff.patch ]; then
             echo "Applying diff.patch to branch $BRANCH_NAME"
-            git apply --3way holon-output/diff.patch
+            git apply --3way /tmp/holon-output/diff.patch
 
             # Add all changes
             git add .
@@ -362,14 +367,14 @@ jobs:
             --owner "${{ github.repository_owner }}" \
             --repo "${{ github.event.repository.name }}" \
             --pr "${{ needs.parse-and-gate.outputs.pr_number }}" \
-            --output "../holon-output" \
+            --output "/tmp/holon-output" \
             --token "${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}"
 
       - name: Post Summary to GitHub Actions
         if: always()
         run: |
-          if [ -f holon-output/summary.md ]; then
-            cat holon-output/summary.md >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/holon-output/summary.md ]; then
+            cat /tmp/holon-output/summary.md >> $GITHUB_STEP_SUMMARY
           fi
 
           echo ""
@@ -384,7 +389,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: holon-fix-output-pr-${{ needs.parse-and-gate.outputs.pr_number }}
-          path: holon-output/
+          path: /tmp/holon-output/
           retention-days: 7
 
   skip-execution:
