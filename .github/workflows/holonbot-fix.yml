@@ -71,14 +71,13 @@ jobs:
             exit 0
           fi
 
-          # Gate 3: Check if PR is not a fork (head repo == base repo)
-          PR_INFO=$(gh pr view "$PR_NUMBER" --json baseRepository,headRepository --jq '{base: .baseRepository.name, head: .headRepository.name}')
-          BASE_REPO=$(echo "$PR_INFO" | jq -r '.base')
-          HEAD_REPO=$(echo "$PR_INFO" | jq -r '.head')
+          # Gate 3: Check if PR is not a fork
+          # Use isCrossRepository field which is true when head and base repos are different
+          IS_FORK=$(gh pr view "$PR_NUMBER" --json isCrossRepository --jq '.isCrossRepository')
 
-          if [ "$BASE_REPO" != "$HEAD_REPO" ]; then
+          if [ "$IS_FORK" = "true" ]; then
             echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "reason=PR is from fork (head: $HEAD_REPO, base: $BASE_REPO) - not supported in MVP" >> $GITHUB_OUTPUT
+            echo "reason=PR is from a fork repository - not supported in MVP" >> $GITHUB_OUTPUT
             exit 0
           fi
 
