@@ -7,7 +7,7 @@
  */
 
 import { Octokit } from '@octokit/rest';
-import { publishHolonResults } from '../lib/publisher.js';
+import { publishHolonResults } from './lib/publisher.js';
 
 function usage() {
   // Keep this minimal for Actions logs.
