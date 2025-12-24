@@ -1,5 +1,6 @@
 # Binaries
 bin/
+holon
 
 # Holon execution outputs
 holon-output/
