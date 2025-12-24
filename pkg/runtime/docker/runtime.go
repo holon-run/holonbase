@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -51,12 +52,43 @@ func (r *Runtime) RunHolon(ctx context.Context, cfg *ContainerConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot dir: %w", err)
 	}
-	defer os.RemoveAll(snapshotDir)
 
-	fmt.Printf("Snapshotting workspace to %s...\n", snapshotDir)
-	if err := copyDir(cfg.Workspace, snapshotDir); err != nil {
-		return fmt.Errorf("failed to snapshot workspace: %w", err)
+	// Use git worktree if workspace is a git repository, otherwise fall back to copy
+	useWorktree := isGitRepo(cfg.Workspace)
+	if useWorktree {
+		fmt.Printf("Creating git worktree at %s...\n", snapshotDir)
+		if err := createWorktree(cfg.Workspace, snapshotDir); err != nil {
+			// If worktree creation fails, log a warning and fall back to copy
+			fmt.Printf("Warning: failed to create worktree: %v. Falling back to copy...\n", err)
+			useWorktree = false
+			if err := copyDir(cfg.Workspace, snapshotDir); err != nil {
+				// Attempt to clean up any partial worktree state; fall back to removing the directory.
+				if rmErr := removeWorktree(cfg.Workspace, snapshotDir); rmErr != nil {
+					_ = os.RemoveAll(snapshotDir)
+				}
+				return fmt.Errorf("failed to snapshot workspace: %w", err)
+			}
+		}
+	} else {
+		fmt.Printf("Snapshotting workspace to %s...\n", snapshotDir)
+		if err := copyDir(cfg.Workspace, snapshotDir); err != nil {
+			os.RemoveAll(snapshotDir)
+			return fmt.Errorf("failed to snapshot workspace: %w", err)
+		}
 	}
+
+	// Set up cleanup function based on snapshot method
+	cleanupSnapshot := func() error {
+		if useWorktree {
+			return removeWorktree(cfg.Workspace, snapshotDir)
+		}
+		return os.RemoveAll(snapshotDir)
+	}
+	defer func() {
+		if err := cleanupSnapshot(); err != nil {
+			fmt.Printf("Warning: failed to cleanup snapshot at %s: %v\n", snapshotDir, err)
+		}
+	}()
 
 	// 2. Prepare Image (Build-on-Run composition)
 	if cfg.AgentBundle == "" {
@@ -372,7 +404,45 @@ func copyFile(src, dst string) error {
 	return out.Sync()
 }
 
-// copyDir is a helper to snapshot the workspace
+// isGitRepo checks if the given directory is inside a git repository
+func isGitRepo(dir string) bool {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-dir")
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
+// createWorktree creates a git worktree at the specified path
+// The worktree is created from HEAD with a unique branch name for isolation
+func createWorktree(sourceRepo, worktreePath string) error {
+	// Generate a unique branch name for this worktree
+	// Using a combination of timestamp and PID to avoid collisions
+	branchName := fmt.Sprintf("holon-worktree-%d-%d", time.Now().UnixNano(), os.Getpid())
+
+	cmd := exec.Command("git", "-C", sourceRepo, "worktree", "add",
+		"-b", branchName,
+		worktreePath,
+		"HEAD")
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create worktree: %v, output: %s", err, string(out))
+	}
+	return nil
+}
+
+// removeWorktree removes a git worktree at the specified path
+func removeWorktree(sourceRepo, worktreePath string) error {
+	cmd := exec.Command("git", "-C", sourceRepo, "worktree", "remove", worktreePath)
+	if err := cmd.Run(); err != nil {
+		// Fallback to manual removal if worktree remove fails
+		// This can happen if the worktree was already removed or is in a bad state
+		return os.RemoveAll(worktreePath)
+	}
+	return nil
+}
+
+// copyDir is a helper to snapshot the workspace (fallback for non-git repos)
 func copyDir(src string, dst string) error {
 	// Using cp -a for recursive copy on Darwin/Linux
 	cmd := exec.Command("cp", "-a", src+"/.", dst+"/")
