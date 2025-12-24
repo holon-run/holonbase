@@ -272,48 +272,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
-      - name: Create comment with results
-        if: always()
-        run: |
-          PR_NUMBER="${{ needs.parse-and-gate.outputs.pr_number }}"
-          OUTCOME="${{ steps.holon.outcome }}"
-
-          # Create a simple status comment (detailed summary will be posted by Publisher)
-          if [ "$OUTCOME" = "success" ]; then
-            BODY="## ✅ Holon Fix Complete
-
-          I've successfully processed your fix request for PR #${PR_NUMBER}.
-
-          **Status**: Success
-          **Triggered by**: @${{ github.actor }}
-          **Task**: ${{ steps.task-extraction.outputs.goal }}
-
-          A detailed summary will be posted separately.
-          ---
-          *Processed by Holon*"
-          else
-            BODY="## ❌ Holon Fix Failed
-
-          I encountered an error while processing your fix request for PR #${PR_NUMBER}.
-
-          **Status**: Failed
-          **Triggered by**: @${{ github.actor }}
-          **Task**: ${{ steps.task-extraction.outputs.goal }}
-
-          Please check the workflow logs for more details.
-          ---
-          *Processed by Holon*"
-          fi
-
-          # Post comment
-          gh issue comment "$PR_NUMBER" --body "$BODY"
-        env:
-          GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
-
       - name: Apply changes to PR branch
+        id: apply-changes
         if: success() && steps.holon.outputs.diff_exists == 'true'
         run: |
           BRANCH_NAME="${{ needs.parse-and-gate.outputs.pr_branch }}"
+          CHANGES_APPLIED="false"
 
           git config --local user.email "250454749+holonbot[bot]@users.noreply.github.com"
           git config --local user.name "holonbot[bot]"
@@ -328,22 +292,89 @@ jobs:
           # Apply the generated changes
           if [ -s /tmp/holon-output/diff.patch ]; then
             echo "Applying diff.patch to branch $BRANCH_NAME"
-            git apply --3way /tmp/holon-output/diff.patch
-
-            # Add all changes
-            git add .
-            git commit -m "Apply Holon automated fixes
+            if git apply --3way /tmp/holon-output/diff.patch; then
+              # Add all changes
+              git add .
+              # Check if there are actual changes to commit
+              if git diff-index --quiet HEAD --; then
+                echo "No actual changes detected after applying patch (empty commit)"
+                echo "changes_applied=false" >> $GITHUB_OUTPUT
+              else
+                git commit -m "Apply Holon automated fixes
 
             Triggered by @${{ github.actor }} with @holonbot fix
 
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
             Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
-            git push origin "$BRANCH_NAME"
-            echo "✅ Changes applied and pushed to branch $BRANCH_NAME"
+                git push origin "$BRANCH_NAME"
+                echo "✅ Changes applied and pushed to branch $BRANCH_NAME"
+                echo "changes_applied=true" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "❌ Failed to apply diff.patch"
+              echo "changes_applied=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
           else
             echo "No diff.patch found or empty - no changes to apply"
+            echo "changes_applied=false" >> $GITHUB_OUTPUT
           fi
+        env:
+          GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
+
+      - name: Create comment with results
+        if: always()
+        run: |
+          PR_NUMBER="${{ needs.parse-and-gate.outputs.pr_number }}"
+          OUTCOME="${{ steps.holon.outcome }}"
+          CHANGES_APPLIED="${{ steps.apply-changes.outputs.changes_applied }}"
+
+          # Determine final status based on both holon outcome and apply result
+          FINAL_STATUS="success"
+          STATUS_EMOJI="✅"
+          STATUS_TEXT="Success"
+          MESSAGE="I've successfully processed your fix request for PR #${PR_NUMBER}."
+
+          if [ "$OUTCOME" != "success" ]; then
+            FINAL_STATUS="failed"
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Failed"
+            MESSAGE="I encountered an error while processing your fix request for PR #${PR_NUMBER}."
+          elif [ "$CHANGES_APPLIED" = "true" ]; then
+            FINAL_STATUS="success"
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Success - Changes Applied"
+            MESSAGE="I've successfully applied fixes to PR #${PR_NUMBER}."
+          elif [ "${{ steps.holon.outputs.diff_exists }}" = "true" ]; then
+            # Holon succeeded, diff exists, but changes were not applied
+            FINAL_STATUS="partial"
+            STATUS_EMOJI="⚠️"
+            STATUS_TEXT="Partial Success - Changes Not Applied"
+            MESSAGE="Holon completed successfully but changes could not be applied to PR #${PR_NUMBER}. Please check the workflow logs."
+          else
+            # Holon succeeded but no diff was generated
+            FINAL_STATUS="success"
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Success - No Changes Needed"
+            MESSAGE="I've analyzed PR #${PR_NUMBER} and no changes were needed."
+          fi
+
+          # Create a simple status comment (detailed summary will be posted by Publisher)
+          BODY="## ${STATUS_EMOJI} Holon Fix ${STATUS_TEXT}
+
+          ${MESSAGE}
+
+          **Status**: ${STATUS_TEXT}
+          **Triggered by**: @${{ github.actor }}
+          **Task**: ${{ steps.task-extraction.outputs.goal }}
+
+          A detailed summary will be posted separately.
+          ---
+          *Processed by Holon*"
+
+          # Post comment
+          gh issue comment "$PR_NUMBER" --body "$BODY"
         env:
           GH_TOKEN: ${{ steps.holon.outputs.token || secrets.GH_PAT || github.token }}
 
