@@ -535,6 +535,27 @@ async function runAgent(): Promise<void> {
     const durationSeconds = (Date.now() - startTime) / 1000;
 
     logger.progress("Staging changes for diff");
+
+    // Debug: Check workspace files before git operations
+    const lsResult = runCommand("ls", ["-la", workspacePath], { cwd: workspacePath, allowFailure: true });
+    logger.debug(`Workspace listing (first 20 lines):\n${lsResult.stdout.split('\n').slice(0, 20).join('\n')}`);
+
+    // Debug: Check if .git directory exists and its type
+    const gitCheckResult = runCommand("test", ["-d", ".git"], { cwd: workspacePath, allowFailure: true });
+    const isGitDir = gitCheckResult.status === 0;
+    logger.debug(`Is .git a directory: ${isGitDir}`);
+
+    if (isGitDir) {
+      const gitFileResult = runCommand("cat", [".git"], { cwd: workspacePath, allowFailure: true });
+      if (gitFileResult.status === 0) {
+        logger.debug(`.git is a file with content: ${gitFileResult.stdout.trim()}`);
+      }
+    }
+
+    // Debug: List files in pkg/context/ before git add
+    const contextLsResult = runCommand("ls", ["-la", "pkg/context/"], { cwd: workspacePath, allowFailure: true });
+    logger.debug(`pkg/context/ listing:\n${contextLsResult.stdout}`);
+
     runCommand("git", ["add", "-A"], { cwd: workspacePath, allowFailure: true });
 
     // Remove compiled holon binary from git index.
@@ -546,7 +567,7 @@ async function runAgent(): Promise<void> {
 
     // Debug: check git status before generating diff
     const statusResult = runCommand("git", ["status", "--short"], { cwd: workspacePath, allowFailure: true });
-    logger.debug(`Git status after staging:\n${statusResult.stdout}`);
+    logger.debug(`Git status after staging:\n${statusResult.stdout || "(empty)"}`);
 
     // Debug: check what files are staged
     const stagedFilesResult = runCommand("git", ["diff", "--cached", "--name-only"], { cwd: workspacePath, allowFailure: true });
