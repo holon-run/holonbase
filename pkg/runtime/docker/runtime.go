@@ -420,6 +420,7 @@ func createWorktree(sourceRepo, worktreePath string) error {
 	// Using a combination of timestamp and PID to avoid collisions
 	branchName := fmt.Sprintf("holon-worktree-%d-%d", time.Now().UnixNano(), os.Getpid())
 
+	fmt.Printf("  Creating worktree with branch: %s\n", branchName)
 	cmd := exec.Command("git", "-C", sourceRepo, "worktree", "add",
 		"-b", branchName,
 		worktreePath,
@@ -428,6 +429,14 @@ func createWorktree(sourceRepo, worktreePath string) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create worktree: %v, output: %s", err, string(out))
 	}
+
+	// Verify worktree was created successfully by checking git status
+	verifyCmd := exec.Command("git", "-C", worktreePath, "status", "--short")
+	if verifyOut, verifyErr := verifyCmd.CombinedOutput(); verifyErr != nil {
+		return fmt.Errorf("worktree created but git check failed: %v, output: %s", verifyErr, string(verifyOut))
+	}
+	fmt.Printf("  ✓ Worktree created and verified\n")
+
 	return nil
 }
 

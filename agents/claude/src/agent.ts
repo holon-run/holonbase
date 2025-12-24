@@ -544,6 +544,15 @@ async function runAgent(): Promise<void> {
     runCommand("git", ["reset", "holon"], { cwd: workspacePath, allowFailure: true });
     runCommand("git", ["reset", "bin/holon"], { cwd: workspacePath, allowFailure: true });
 
+    // Debug: check git status before generating diff
+    const statusResult = runCommand("git", ["status", "--short"], { cwd: workspacePath, allowFailure: true });
+    logger.debug(`Git status after staging:\n${statusResult.stdout}`);
+
+    // Debug: check what files are staged
+    const stagedFilesResult = runCommand("git", ["diff", "--cached", "--name-only"], { cwd: workspacePath, allowFailure: true });
+    const stagedFiles = stagedFilesResult.stdout.trim().split("\n").filter((f) => f);
+    logger.debug(`Staged files (${stagedFiles.length}):\n${stagedFiles.map((f) => `  ${f}`).join("\n") || "  (none)"}`);
+
     logger.progress("Generating patch file");
     const diffResult = runCommand(
       "git",
@@ -552,6 +561,20 @@ async function runAgent(): Promise<void> {
     );
 
     const patchContent = diffResult.stdout;
+
+    // Warn if patch is unexpectedly empty while we have staged files
+    if (patchContent.length === 0 && stagedFiles.length > 0) {
+      console.log(`⚠️  Warning: ${stagedFiles.length} files are staged but diff is empty. This may indicate a git worktree issue.`);
+      logger.info(`Staged files with empty diff - checking worktree status`);
+
+      // Additional debug: check current HEAD
+      const headResult = runCommand("git", ["rev-parse", "HEAD"], { cwd: workspacePath, allowFailure: true });
+      logger.debug(`Current HEAD: ${headResult.stdout.trim()}`);
+
+      const branchResult = runCommand("git", ["branch", "--show-current"], { cwd: workspacePath, allowFailure: true });
+      logger.debug(`Current branch: ${branchResult.stdout.trim()}`);
+    }
+
     logger.progress(`Generated patch: ${patchContent.length} characters`);
 
     const manifest = {
