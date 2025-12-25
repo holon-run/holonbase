@@ -24,6 +24,8 @@ var (
 	solveBase            string
 	solveOutDir          string
 	solveContext         string
+	solveInput           string
+	solveCleanup         string
 	solveAgent           string
 	solveImage           string
 	solveMode            string
@@ -404,12 +406,55 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Collect context based on type
-	contextDir := filepath.Join(outDir, "context")
+	// Create input directory (or use user-provided path)
+	inputDir := solveInput
+	inputIsTemp := false
+	if inputDir == "" {
+		// Create temporary input directory
+		td, err := os.MkdirTemp("", "holon-input-*")
+		if err != nil {
+			return fmt.Errorf("failed to create temp input dir: %w", err)
+		}
+		inputDir = td
+		inputIsTemp = true
+		fmt.Printf("Created temporary input directory: %s\n", inputDir)
+	} else {
+		fmt.Printf("Using input directory: %s\n", inputDir)
+	}
+
+	// Cleanup input directory based on cleanup mode
+	cleanupMode := solveCleanup
+	if cleanupMode == "" {
+		cleanupMode = "auto" // Default to auto cleanup
+	}
+
+	// Validate cleanup mode
+	if cleanupMode != "auto" && cleanupMode != "none" && cleanupMode != "all" {
+		return fmt.Errorf("invalid cleanup mode: %q (must be one of: auto, none, all)", cleanupMode)
+	}
+
+	// Cleanup input directory based on mode and whether it's temp
+	// For temp input: clean on "auto" or "all"
+	// For user input: clean only on "all"
+	if (inputIsTemp && (cleanupMode == "auto" || cleanupMode == "all")) ||
+		(!inputIsTemp && cleanupMode == "all") {
+		defer func() {
+			if inputIsTemp {
+				fmt.Printf("Cleaning up temporary input directory: %s\n", inputDir)
+			} else {
+				fmt.Printf("Cleaning up input directory: %s\n", inputDir)
+			}
+			os.RemoveAll(inputDir)
+		}()
+	}
+
+	// Create context subdirectory in input directory
+	contextDir := filepath.Join(inputDir, "context")
 	if err := os.MkdirAll(contextDir, 0755); err != nil {
 		return fmt.Errorf("failed to create context directory: %w", err)
 	}
 
+	// Collect context based on type
 	if refType == "pr" {
 		// Collect PR context
 		prCollector := prcontext.NewCollector(prcontext.CollectorConfig{
@@ -431,10 +476,10 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 	} else {
 		// Collect issue context
 		issueCollector := issue.NewCollector(issue.CollectorConfig{
-			Owner:     solveRef.Owner,
-			Repo:      solveRef.Repo,
-			IssueNum:  solveRef.Number,
-			Token:     token,
+			Owner:    solveRef.Owner,
+			Repo:     solveRef.Repo,
+			IssueNum: solveRef.Number,
+			Token:    token,
 			OutputDir: contextDir,
 		})
 		if err := issueCollector.Collect(ctx); err != nil {
@@ -493,10 +538,12 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 		AgentBundle:   solveAgent,
 		WorkspacePath: workspacePrep.path,
 		ContextPath:   contextDir,
+		InputPath:     inputDir,
 		OutDir:        outDir,
 		RoleName:      solveRole,
 		LogLevel:      solveLogLevel,
 		Mode:          solveMode,
+		Cleanup:       cleanupMode,
 	})
 
 	if err != nil {
@@ -510,6 +557,12 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 
 	if err := publishResults(ctx, solveRef, refType, outDir); err != nil {
 		return fmt.Errorf("failed to publish results: %w", err)
+	}
+
+	// Cleanup output directory if requested (after publishing completes)
+	if cleanupMode == "all" {
+		fmt.Printf("\nCleaning up output directory: %s\n", outDir)
+		os.RemoveAll(outDir)
 	}
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
@@ -679,6 +732,8 @@ func init() {
 	solveCmd.Flags().StringVar(&solveBase, "base", "main", "Base branch for PR creation (issue mode only)")
 	solveCmd.Flags().StringVarP(&solveOutDir, "out", "o", "./holon-output", "Output directory")
 	solveCmd.Flags().StringVarP(&solveContext, "context", "c", "", "Additional context directory (deprecated)")
+	solveCmd.Flags().StringVar(&solveInput, "input", "", "Input directory path (default: creates temp dir, auto-cleaned)")
+	solveCmd.Flags().StringVar(&solveCleanup, "cleanup", "auto", "Cleanup mode: auto (clean temp input), none (keep all), all (clean input+output)")
 	solveCmd.Flags().StringVar(&solveAgent, "agent", "", "Agent bundle reference")
 	solveCmd.Flags().StringVarP(&solveImage, "image", "i", "golang:1.22", "Docker base image")
 	solveCmd.Flags().StringVar(&solveMode, "mode", "", "Execution mode (default: auto-detect from ref type)")
