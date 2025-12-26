@@ -9,6 +9,8 @@ PR-Fix mode is designed for GitHub PR fix operations. The agent analyzes PR feed
   - `pr.diff`: The code changes being reviewed (optional but recommended)
   - `check_runs.json` / `checks.json`: CI/check run results (optional)
 
+**Important:** When responding to review comments, use your GitHub identity (from common contract) to avoid replying to your own comments.
+
 **Required Outputs:**
 1. **`/holon/output/summary.md`**: Human-readable summary of your analysis and actions taken
 2. **`/holon/output/pr-fix.json`**: Structured JSON containing fix status and responses
