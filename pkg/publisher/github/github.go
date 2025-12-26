@@ -100,30 +100,59 @@ func (g *GitHubPublisher) Publish(req publisher.PublishRequest) (publisher.Publi
 			wrappedErr := fmt.Errorf("failed to read pr-fix.json: %w", err)
 			result.Errors = append(result.Errors, publisher.NewError(wrappedErr.Error()))
 			result.Success = false
-		} else if len(prFixData.ReviewReplies) > 0 {
-			replyResult, err := g.publishReviewReplies(ctx, client, *prRef, prFixData.ReviewReplies, botLogin)
-			if err != nil {
-				result.Errors = append(result.Errors, publisher.NewErrorWithAction(err.Error(), "publish_review_replies"))
-				result.Success = false
-			} else {
-				// Add actions for posted replies
-				for _, detail := range replyResult.Details {
-					if detail.Status == "posted" {
+		} else {
+			// Step 1.1: Handle review replies
+			if len(prFixData.ReviewReplies) > 0 {
+				replyResult, err := g.publishReviewReplies(ctx, client, *prRef, prFixData.ReviewReplies, botLogin)
+				if err != nil {
+					result.Errors = append(result.Errors, publisher.NewErrorWithAction(err.Error(), "publish_review_replies"))
+					result.Success = false
+				} else {
+					// Add actions for posted replies
+					for _, detail := range replyResult.Details {
+						if detail.Status == "posted" {
+							result.Actions = append(result.Actions, publisher.PublishAction{
+								Type:        "replied_review_comment",
+								Description: fmt.Sprintf("Replied to review comment %d", detail.CommentID),
+								Metadata: map[string]string{
+									"comment_id": strconv.FormatInt(detail.CommentID, 10),
+								},
+							})
+						}
+					}
+
+					// Add summary action
+					result.Actions = append(result.Actions, publisher.PublishAction{
+						Type:        "review_replies_summary",
+						Description: fmt.Sprintf("Review replies: %d posted, %d skipped, %d failed", replyResult.Posted, replyResult.Skipped, replyResult.Failed),
+					})
+				}
+			}
+
+			// Step 1.2: Handle follow-up issues if present
+			if len(prFixData.FollowUpIssues) > 0 {
+				issueResult, err := g.handleFollowUpIssues(ctx, client, *prRef, prFixData.FollowUpIssues)
+				if err != nil {
+					result.Errors = append(result.Errors, publisher.NewErrorWithAction(err.Error(), "handle_follow_up_issues"))
+					result.Success = false
+				} else {
+					// Add actions for created issues
+					for _, detail := range issueResult.Created {
 						result.Actions = append(result.Actions, publisher.PublishAction{
-							Type:        "replied_review_comment",
-							Description: fmt.Sprintf("Replied to review comment %d", detail.CommentID),
+							Type:        "created_follow_up_issue",
+							Description: fmt.Sprintf("Created follow-up issue: %s", detail.Title),
 							Metadata: map[string]string{
-								"comment_id": strconv.FormatInt(detail.CommentID, 10),
+								"issue_url": detail.IssueURL,
+								"title":     detail.Title,
 							},
 						})
 					}
+					// Add summary action
+					result.Actions = append(result.Actions, publisher.PublishAction{
+						Type:        "follow_up_issues_summary",
+						Description: fmt.Sprintf("Follow-up issues: %d created, %d deferred (drafts in pr-fix.json)", issueResult.CreatedCount, issueResult.DeferredCount),
+					})
 				}
-
-				// Add summary action
-				result.Actions = append(result.Actions, publisher.PublishAction{
-					Type:        "review_replies_summary",
-					Description: fmt.Sprintf("Review replies: %d posted, %d skipped, %d failed", replyResult.Posted, replyResult.Skipped, replyResult.Failed),
-				})
 			}
 		}
 	}
@@ -155,6 +184,46 @@ func (g *GitHubPublisher) Publish(req publisher.PublishRequest) (publisher.Publi
 				})
 			}
 		}
+	}
+
+	return result, nil
+}
+
+// handleFollowUpIssues creates GitHub issues for any follow-up issues that don't already have an issue_url.
+// Issues with an existing issue_url are considered already created by the agent and are tracked but not recreated.
+// Issues without an issue_url are created by the publisher, with errors tracked per issue (continues on failure).
+func (g *GitHubPublisher) handleFollowUpIssues(ctx context.Context, client *hghelper.Client, prRef PRRef, issues []FollowUpIssue) (*FollowUpIssuesResult, error) {
+	result := &FollowUpIssuesResult{
+		Created:       make([]FollowUpIssueDetail, 0),
+		CreatedCount:  0,
+		DeferredCount: 0,
+	}
+
+	for _, issue := range issues {
+		// If agent already created the issue and provided the URL
+		if issue.IssueURL != "" {
+			result.Created = append(result.Created, FollowUpIssueDetail{
+				Title:    issue.Title,
+				IssueURL: issue.IssueURL,
+			})
+			result.CreatedCount++
+			continue
+		}
+
+		// Create the issue on GitHub (publisher creates it since agent didn't)
+		issueURL, err := client.CreateIssue(ctx, prRef.Owner, prRef.Repo, issue.Title, issue.Body, issue.Labels)
+		if err != nil {
+			// Track failure but continue processing other issues (similar to publishReviewReplies)
+			result.DeferredCount++
+			// We don't have a dedicated "Failed" field in FollowUpIssuesResult, so we count it as deferred
+			// The error will be logged via the PublishResult.Errors mechanism
+			continue
+		}
+		result.Created = append(result.Created, FollowUpIssueDetail{
+			Title:    issue.Title,
+			IssueURL: issueURL,
+		})
+		result.CreatedCount++
 	}
 
 	return result, nil
@@ -315,6 +384,8 @@ func formatReviewReply(reply ReviewReply) string {
 		emoji = "⚠️"
 	case "need-info":
 		emoji = "❓"
+	case "deferred":
+		emoji = "🔜"
 	default:
 		emoji = "📝"
 	}

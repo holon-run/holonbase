@@ -373,6 +373,11 @@ Holon includes a publish system for publishing Holon execution outputs to extern
    - Target format: `owner/repo/pr/123` or `owner/repo#123`
    - Posts summary comments with idempotency
    - Replies to review comments based on `pr-fix.json`
+   - **Deferred work support**: Can create follow-up issues for non-blocking refactor requests
+     - New status `deferred` with 🔜 emoji for valid but non-blocking requests
+     - Publisher creates issues for any `follow_up_issues` entries without an `issue_url`
+     - Agent can optionally create issues and populate `issue_url` if it has token access
+     - Follow-up issues include context, rationale, and implementation guidance
 
 2. **GitHub PR Publisher** (`pkg/publisher/githubpr/`):
    - Creates or updates GitHub PRs from Holon outputs
@@ -439,6 +444,7 @@ Uses go-github SDK under the hood:
 - `FetchPRDiff()` - Unified diff
 - `FetchCheckRuns()` - CI/check runs
 - `FetchCombinedStatus()` - Combined commit status
+- `CreateIssue()` - Create a new GitHub issue (used for follow-up issues from pr-fix mode)
 
 **Types**: `pkg/github/types.go`
 Custom type definitions that mirror GitHub API responses:
