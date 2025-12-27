@@ -24,8 +24,8 @@ const (
 	// TitleFlag is the flag name for PR title configuration.
 	TitleFlag = "title"
 
-	// IssueFlag is the flag name for issue reference.
-	IssueFlag = "issue"
+	// IssueFlag is the flag name for issue ID reference.
+	IssueFlag = "issue_id"
 )
 
 // PRPublisher publishes Holon outputs as GitHub PRs.
@@ -283,11 +283,8 @@ func (p *PRPublisher) buildConfig(manifest map[string]interface{}) PRPublisherCo
 		if title, ok := metadata[TitleFlag].(string); ok {
 			config.Title = title
 		}
-		// Prefer issue_id (plain number) over issue (full reference like "owner/repo#123")
-		if issueID, ok := metadata["issue_id"].(string); ok {
+		if issueID, ok := metadata[IssueFlag].(string); ok {
 			config.IssueID = issueID
-		} else if issue, ok := metadata[IssueFlag].(string); ok {
-			config.IssueID = issue
 		}
 	}
 
