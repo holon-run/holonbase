@@ -47,6 +47,7 @@ type ContainerConfig struct {
 	WorkspaceStrategy string                 // Workspace preparation strategy (e.g., "git-clone", "snapshot")
 	WorkspaceHistory  workspace.HistoryMode // How much git history to include
 	WorkspaceRef      string                 // Git ref to checkout (optional)
+	WorkspaceIsTemporary bool                // true if workspace is a temporary directory (vs user-provided)
 
 	// Agent config mount mode
 	AgentConfigMode string // Agent config mount mode: "auto", "yes", "no"
@@ -430,6 +431,46 @@ func copyFile(src, dst string) error {
 
 // prepareWorkspace prepares the workspace using the configured strategy
 func prepareWorkspace(ctx context.Context, cfg *ContainerConfig) (string, workspace.Preparer, error) {
+	// If the workspace is already a temporary directory (created by solve),
+	// use it directly instead of creating another snapshot.
+	// This optimization avoids double cloning when solve creates a temp workspace.
+	if cfg.WorkspaceIsTemporary {
+		holonlog.Info("using temporary workspace directly (no snapshot needed)", "workspace", cfg.Workspace)
+
+		// Use an ExistingPreparer to prepare the temporary workspace and
+		// still write the workspace manifest so downstream consumers see
+		// consistent metadata regardless of how the workspace was created.
+		preparer := workspace.NewExistingPreparer()
+
+		// Determine history mode for manifest generation
+		historyMode := cfg.WorkspaceHistory
+		if historyMode == "" {
+			historyMode = workspace.HistoryFull // Default to full history
+		}
+
+		prepareResult, err := preparer.Prepare(ctx, workspace.PrepareRequest{
+			Source:     cfg.Workspace,
+			Dest:       cfg.Workspace,
+			Ref:        cfg.WorkspaceRef,
+			History:    historyMode,
+			Submodules: workspace.SubmodulesNone,
+			CleanDest:  false,
+		})
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to prepare temporary workspace: %w", err)
+		}
+
+		// Write workspace manifest to output directory if specified
+		if cfg.OutDir != "" {
+			if err := writeWorkspaceManifest(cfg.OutDir, prepareResult); err != nil {
+				return "", nil, fmt.Errorf("failed to write workspace manifest: %w", err)
+			}
+		}
+
+		// Return the workspace as-is with an existing preparer (no-op cleanup)
+		return cfg.Workspace, preparer, nil
+	}
+
 	// Create snapshot directory outside workspace
 	snapshotDir, err := workspace.MkdirTempOutsideWorkspace(cfg.Workspace, "holon-workspace-*")
 	if err != nil {
