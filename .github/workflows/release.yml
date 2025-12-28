@@ -76,6 +76,7 @@ jobs:
         # Clone the tap repository
         cd /tmp
         git clone https://github.com/holon-run/homebrew-tap.git
+        mkdir -p /tmp/homebrew-tap/Formula
         cp /home/runner/work/holon/holon/homebrew-tap/Formula/holon.rb /tmp/homebrew-tap/Formula/holon.rb
         cd /tmp/homebrew-tap
 
