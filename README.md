@@ -11,7 +11,6 @@ Holon runs an AI coding agent inside a Docker sandbox and emits **standard artif
 Holon writes to the directory specified by `--output`:
 - Default creates a temporary directory (e.g., `$TMPDIR/holon-output-*`) to avoid polluting your workspace
 - Use `--output <dir>` to specify a custom location
-- `--out` is accepted as a deprecated alias
 
 Common artifacts:
 
@@ -356,7 +355,6 @@ holon solve pr <ref>      # Force PR mode
 - `--image <image>`: Docker base image (default: auto-detect)
 - `--image-auto-detect`: Enable automatic base image detection (default: `true`)
 - `--output <dir>`: Output directory (default: creates temp dir to avoid polluting workspace)
-- `--out <dir>`: Deprecated alias for `--output`
 - `--role <role>`: Role to assume (e.g., `developer`, `reviewer`)
 - `--log-level <level>`: Log verbosity (default: `progress`)
 
@@ -472,7 +470,6 @@ CLI flags (most used):
 - `--image`: base toolchain image (default: auto-detect)
 - `--image-auto-detect`: Enable automatic base image detection (default: true)
 - `--agent`: agent bundle reference (`.tar.gz`)
-- `--agent-bundle`: deprecated alias for `--agent`
 - `--workspace`: repo/workspace path (default `.`)
 - `--context`: extra context dir mounted at `/holon/input/context`
 - `--role`: prompt persona (`developer`, `reviewer`)
@@ -481,7 +478,6 @@ CLI flags (most used):
 
 Agent selection env vars (optional):
 - `HOLON_AGENT`: agent bundle reference (`.tar.gz`)
-- `HOLON_AGENT_BUNDLE`: deprecated alias for `HOLON_AGENT`
 
 Claude agent env (optional):
 - `HOLON_MODEL`, `HOLON_FALLBACK_MODEL`
