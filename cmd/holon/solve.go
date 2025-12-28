@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/holon-run/holon/pkg/config"
-	"github.com/holon-run/holon/pkg/context/issue"
 	prcontext "github.com/holon-run/holon/pkg/context/github"
+	"github.com/holon-run/holon/pkg/context/issue"
 	"github.com/holon-run/holon/pkg/git"
 	pkggithub "github.com/holon-run/holon/pkg/github"
 	"github.com/holon-run/holon/pkg/image"
@@ -22,24 +22,24 @@ import (
 )
 
 var (
-	solveRepo            string
-	solveBase            string
-	solveOutDir          string
-	solveContext         string
-	solveInput           string
-	solveCleanup         string
-	solveAgent           string
-	solveImage           string
-	solveImageAutoDetect bool
-	solveMode            string
-	solveRole            string
-	solveLogLevel        string
-	solveDryRun          bool
-	solveWorkspace       string
-	solveWorkspaceHistory  string
-	solveWorkspaceRef      string
-	solveFetchRemote       bool
-	solveAgentConfigMode   string
+	solveRepo             string
+	solveBase             string
+	solveOutDir           string
+	solveContext          string
+	solveInput            string
+	solveCleanup          string
+	solveAgent            string
+	solveImage            string
+	solveImageAutoDetect  bool
+	solveMode             string
+	solveRole             string
+	solveLogLevel         string
+	solveDryRun           bool
+	solveWorkspace        string
+	solveWorkspaceHistory string
+	solveWorkspaceRef     string
+	solveFetchRemote      bool
+	solveAgentConfigMode  string
 )
 
 // solveCmd is the parent solve command
@@ -58,7 +58,7 @@ Workspace Preparation:
   The workspace is prepared automatically based on the context:
   - If --workspace PATH is provided: uses the existing directory (no cloning)
   - If current directory matches the ref repo: creates a clean temp workspace via git-clone (using --local)
-  - Otherwise: clones from the remote repository into a temp directory (shallow by default)
+  - Otherwise: clones from the remote repository into a temp directory (full history by default)
 
   Temporary workspaces are automatically cleaned up after execution.
 
@@ -147,18 +147,18 @@ Examples:
 
 // workspacePreparation holds the workspace preparation result
 type workspacePreparation struct {
-	path       string
-	preparer   workspace.Preparer
+	path          string
+	preparer      workspace.Preparer
 	cleanupNeeded bool
 	isTemp        bool // true if solve created a temporary workspace (vs user-provided)
 }
 
 // prepareWorkspaceForSolve prepares a workspace based on the solve reference and flags
 // Decision logic:
-// 1) If --workspace PATH is provided: use preparer "existing" on PATH (no clone/copy)
-// 2) If not provided and current dir is a git repo matching the ref owner/repo:
-//    prepare a clean temp workspace via git-clone with Source=current repo (using --local internally)
-// 3) Otherwise: prepare via git-clone from the ref's repo URL into a temp dir (shallow by default)
+//  1. If --workspace PATH is provided: use preparer "existing" on PATH (no clone/copy)
+//  2. If not provided and current dir is a git repo matching the ref owner/repo:
+//     prepare a clean temp workspace via git-clone with Source=current repo (using --local internally)
+//  3. Otherwise: prepare via git-clone from the ref's repo URL into a temp dir (shallow by default)
 //
 // Note: The token parameter is currently unused for authentication during git clone operations.
 // This means that private repositories may fail to clone if they require authentication.
@@ -193,8 +193,8 @@ func prepareWorkspaceForSolve(ctx context.Context, solveRef *pkggithub.SolveRef,
 
 		// User-provided workspace is not temporary
 		return &workspacePreparation{
-			path:         workspacePath,
-			preparer:     preparer,
+			path:          workspacePath,
+			preparer:      preparer,
 			cleanupNeeded: false,
 			isTemp:        false,
 		}, nil
@@ -232,10 +232,10 @@ func prepareWorkspaceForSolve(ctx context.Context, solveRef *pkggithub.SolveRef,
 
 		// Prepare using git-clone strategy
 		_, err = preparer.Prepare(ctx, workspace.PrepareRequest{
-			Source:  source,
-			Dest:    workspacePath,
-			Ref:     solveWorkspaceRef,
-			History: workspace.HistoryMode(historyMode),
+			Source:    source,
+			Dest:      workspacePath,
+			Ref:       solveWorkspaceRef,
+			History:   workspace.HistoryMode(historyMode),
 			CleanDest: true,
 		})
 		if err != nil {
@@ -273,15 +273,15 @@ func prepareWorkspaceForSolve(ctx context.Context, solveRef *pkggithub.SolveRef,
 		// Determine history mode
 		historyMode := solveWorkspaceHistory
 		if historyMode == "" {
-			historyMode = "shallow" // Default to shallow for remote clones
+			historyMode = "full" // Default to full for remote clones so publish has history
 		}
 
 		// Prepare using git-clone strategy
 		result, err := preparer.Prepare(ctx, workspace.PrepareRequest{
-			Source:  source,
-			Dest:    workspacePath,
-			Ref:     solveWorkspaceRef,
-			History: workspace.HistoryMode(historyMode),
+			Source:    source,
+			Dest:      workspacePath,
+			Ref:       solveWorkspaceRef,
+			History:   workspace.HistoryMode(historyMode),
 			CleanDest: true,
 		})
 		if err != nil {
@@ -314,8 +314,8 @@ func prepareWorkspaceForSolve(ctx context.Context, solveRef *pkggithub.SolveRef,
 	}
 
 	return &workspacePreparation{
-		path:         workspacePath,
-		preparer:     preparer,
+		path:          workspacePath,
+		preparer:      preparer,
 		cleanupNeeded: cleanupNeeded,
 		isTemp:        true, // Both local clone and remote clone create temporary workspaces
 	}, nil
@@ -509,10 +509,10 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 	} else {
 		// Collect issue context
 		issueCollector := issue.NewCollector(issue.CollectorConfig{
-			Owner:    solveRef.Owner,
-			Repo:     solveRef.Repo,
-			IssueNum: solveRef.Number,
-			Token:    token,
+			Owner:     solveRef.Owner,
+			Repo:      solveRef.Repo,
+			IssueNum:  solveRef.Number,
+			Token:     token,
 			OutputDir: contextDir,
 		})
 		if err := issueCollector.Collect(ctx); err != nil {
@@ -534,14 +534,18 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 		return fmt.Errorf("failed to prepare workspace: %w", err)
 	}
 
-	// Ensure cleanup happens for temporary workspaces
+	// Cleanup temporary workspace if allowed by cleanup mode; otherwise preserve for debugging.
 	if workspacePrep != nil && workspacePrep.cleanupNeeded {
-		defer func() {
-			fmt.Printf("\nCleaning up temporary workspace: %s\n", workspacePrep.path)
-			if err := workspacePrep.preparer.Cleanup(workspacePrep.path); err != nil {
-				fmt.Printf("Warning: failed to cleanup workspace: %v\n", err)
-			}
-		}()
+		if cleanupMode == "none" {
+			fmt.Printf("\nNOTE: Workspace will be preserved for debugging (cleanup=none): %s\n", workspacePrep.path)
+		} else {
+			defer func() {
+				fmt.Printf("\nCleaning up temporary workspace: %s\n", workspacePrep.path)
+				if err := workspacePrep.preparer.Cleanup(workspacePrep.path); err != nil {
+					fmt.Printf("Warning: failed to cleanup workspace: %v\n", err)
+				}
+			}()
+		}
 	}
 
 	// Resolve base image with auto-detection support
@@ -609,19 +613,19 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 
 	runner := NewRunner(rt)
 	err = runner.Run(ctx, RunnerConfig{
-		GoalStr:           goal,
-		TaskName:          fmt.Sprintf("solve-%s-%d", refType, solveRef.Number),
-		BaseImage:         resolvedImage,
-		AgentBundle:       solveAgent,
-		WorkspacePath:     workspacePrep.path,
-		ContextPath:       contextDir,
-		InputPath:         inputDir,
-		OutDir:            outDir,
-		RoleName:          solveRole,
-		LogLevel:          solveLogLevel,
-		Mode:              solveMode,
-		Cleanup:           cleanupMode,
-		AgentConfigMode:   solveAgentConfigMode,
+		GoalStr:              goal,
+		TaskName:             fmt.Sprintf("solve-%s-%d", refType, solveRef.Number),
+		BaseImage:            resolvedImage,
+		AgentBundle:          solveAgent,
+		WorkspacePath:        workspacePrep.path,
+		ContextPath:          contextDir,
+		InputPath:            inputDir,
+		OutDir:               outDir,
+		RoleName:             solveRole,
+		LogLevel:             solveLogLevel,
+		Mode:                 solveMode,
+		Cleanup:              cleanupMode,
+		AgentConfigMode:      solveAgentConfigMode,
 		WorkspaceIsTemporary: workspacePrep.isTemp,
 	})
 
@@ -637,16 +641,18 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 	fmt.Println("Publishing results...")
 	fmt.Println(strings.Repeat("=", 60))
 
-	if err := publishResults(ctx, solveRef, refType, outDir); err != nil {
+	if err := publishResults(ctx, solveRef, refType, inputDir, outDir, cleanupMode); err != nil {
 		return fmt.Errorf("failed to publish results: %w", err)
 	}
 
 	// Cleanup snapshot directory after publish is complete
-	if snapshotDir != "" {
+	if snapshotDir != "" && cleanupMode != "none" {
 		fmt.Printf("Cleaning up snapshot directory: %s\n", snapshotDir)
 		if err := os.RemoveAll(snapshotDir); err != nil {
 			fmt.Printf("Warning: failed to cleanup snapshot directory %s: %v\n", snapshotDir, err)
 		}
+	} else if snapshotDir != "" {
+		fmt.Printf("Preserving snapshot directory (cleanup=none): %s\n", snapshotDir)
 	}
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
@@ -685,6 +691,13 @@ func getGitHubToken() (string, error) {
 	}
 	if fromGh {
 		fmt.Fprintln(os.Stderr, "Using GitHub token from 'gh auth token' (GITHUB_TOKEN not set)")
+		// Propagate gh auth token into environment so the agent container can use gh CLI.
+		if os.Getenv("GITHUB_TOKEN") == "" {
+			os.Setenv("GITHUB_TOKEN", token)
+		}
+		if os.Getenv("GH_TOKEN") == "" {
+			os.Setenv("GH_TOKEN", token)
+		}
 	}
 	return token, nil
 }
@@ -698,7 +711,29 @@ func buildGoal(ref *pkggithub.SolveRef, refType string) string {
 }
 
 // publishResults publishes the holon execution results
-func publishResults(ctx context.Context, ref *pkggithub.SolveRef, refType string, outDir string) error {
+func publishResults(ctx context.Context, ref *pkggithub.SolveRef, refType string, inputDir string, outDir string, cleanupMode string) error {
+	// Prepare a clean workspace for publishing from manifest so that patches are
+	// applied to a baseline rather than an already-modified tree.
+	pubWS, err := preparePublishWorkspace(ctx, outDir)
+	if err != nil {
+		return fmt.Errorf("failed to prepare publish workspace: %w", err)
+	}
+	// Ensure cleanup after publish unless the publisher takes ownership or cleanup is disabled.
+	if cleanupMode != "none" {
+		defer func() {
+			if pubWS != nil && pubWS.cleanup != nil {
+				pubWS.cleanup()
+			}
+		}()
+	}
+
+	// Point publishers to the prepared workspace.
+	if pubWS != nil {
+		if err := os.Setenv("HOLON_WORKSPACE", pubWS.path); err != nil {
+			return fmt.Errorf("failed to set HOLON_WORKSPACE: %w", err)
+		}
+	}
+
 	// Read manifest
 	manifestPath := filepath.Join(outDir, "manifest.json")
 	manifestData, err := os.ReadFile(manifestPath)
@@ -745,31 +780,35 @@ func publishResults(ctx context.Context, ref *pkggithub.SolveRef, refType string
 		Artifacts: artifacts,
 	}
 
+	if refType == "pr" {
+		// In PR mode, optionally apply/commit/push diff.patch to the PR head branch before posting replies/comments.
+		if diffPath, ok := artifacts["diff.patch"]; ok {
+			if err := publishPatchToPR(ctx, pubWS.path, inputDir, diffPath); err != nil {
+				return fmt.Errorf("publish failed during patch push: %w", err)
+			}
+		}
+	}
+
+	// Determine target and publisher
 	var target string
+	var pub publisher.Publisher
 	if refType == "pr" {
 		target = fmt.Sprintf("%s/%s/pr/%d", ref.Owner, ref.Repo, ref.Number)
+		pub = publisher.Get("github")
 	} else {
-		// For issues, target is the repo for creating a PR
 		if solveBase != "" {
 			target = fmt.Sprintf("%s/%s:%s", ref.Owner, ref.Repo, solveBase)
 		} else {
 			target = fmt.Sprintf("%s/%s:main", ref.Owner, ref.Repo)
 		}
-	}
-
-	req.Target = target
-
-	// Get publisher
-	var pub publisher.Publisher
-	if refType == "pr" {
-		pub = publisher.Get("github")
-	} else {
 		pub = publisher.Get("github-pr")
 	}
 
 	if pub == nil {
 		return fmt.Errorf("publisher '%s' not found", map[string]string{"pr": "github", "issue": "github-pr"}[refType])
 	}
+
+	req.Target = target
 
 	// Validate
 	if err := pub.Validate(req); err != nil {
