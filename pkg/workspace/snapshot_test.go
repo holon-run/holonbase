@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/holon-run/holon/pkg/git"
 )
 
 // TestSnapshotPreparerGitDiff verifies that a snapshot workspace can generate diffs
@@ -171,7 +173,8 @@ func TestSnapshotPreparerNoNetwork(t *testing.T) {
 	}
 
 	// Verify minimal git repo was initialized (so git diff still works)
-	if !IsGitRepo(destDir) {
+	client := git.NewClient(destDir)
+	if !client.IsRepo(context.Background()) {
 		t.Error("destination should be a minimal git repo for diff generation")
 	}
 
