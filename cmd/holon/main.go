@@ -24,6 +24,7 @@ var taskName string
 var baseImage string
 var imageAutoDetect bool
 var agentPath string
+var agentChannel string
 var workspacePath string
 var contextPath string
 var inputPath string
@@ -38,9 +39,11 @@ var skipPreflight bool
 
 // resolvedConfig holds the resolved configuration values
 type resolvedConfig struct {
-	baseImage string
-	agent     string
-	logLevel  string
+	baseImage         string
+	agent             string
+	agentChannel      string
+	agentChannelSource string
+	logLevel          string
 }
 
 // resolveWithProjectConfig resolves configuration values with precedence:
@@ -99,6 +102,20 @@ func resolveWithProjectConfig(cmd *cobra.Command, cfg *config.ProjectConfig, wor
 	if agent != "" {
 		logConfigResolution("agent", agent, source)
 	}
+
+	// Resolve agent channel: CLI > config > default (latest)
+	// Also check HOLON_AGENT_CHANNEL env var
+	cliChannel := agentChannel
+	if !cmd.Flags().Changed("agent-channel") {
+		cliChannel = ""
+	}
+	if cliChannel == "" {
+		cliChannel = os.Getenv("HOLON_AGENT_CHANNEL")
+	}
+	channel, source := cfg.ResolveAgentChannel(cliChannel)
+	resolved.agentChannel = channel
+	resolved.agentChannelSource = source
+	logConfigResolution("agent_channel", channel, source)
 
 	// Resolve log level: CLI > config > default
 	// Only use CLI value if flag was explicitly changed
@@ -210,12 +227,14 @@ var runCmd = &cobra.Command{
 
 		runner := NewRunner(rt)
 		return runner.Run(ctx, RunnerConfig{
-			SpecPath:        specPath,
-			GoalStr:         goalStr,
-			TaskName:        taskName,
-			BaseImage:       resolved.baseImage,
-			AgentBundle:     resolved.agent,
-			WorkspacePath:   workspacePath,
+			SpecPath:           specPath,
+			GoalStr:            goalStr,
+			TaskName:           taskName,
+			BaseImage:          resolved.baseImage,
+			AgentBundle:        resolved.agent,
+			AgentChannel:       resolved.agentChannel,
+			AgentChannelSource: resolved.agentChannelSource,
+			WorkspacePath:      workspacePath,
 			ContextPath:     contextPath,
 			InputPath:       inputPath,
 			OutDir:          resolvedOutDir,
@@ -244,6 +263,7 @@ func init() {
 	runCmd.Flags().StringVarP(&baseImage, "image", "i", "", "Docker image for execution (default: auto-detect from workspace)")
 	runCmd.Flags().BoolVar(&imageAutoDetect, "image-auto-detect", true, "Enable automatic base image detection (default: true)")
 	runCmd.Flags().StringVar(&agentPath, "agent", "", "Agent bundle reference (path to .tar.gz, URL, or alias)")
+	runCmd.Flags().StringVar(&agentChannel, "agent-channel", "", "Agent channel: latest (default), builtin, pinned:<version>")
 	runCmd.Flags().StringVarP(&workspacePath, "workspace", "w", ".", "Path to workspace")
 	runCmd.Flags().StringVarP(&contextPath, "context", "c", "", "Path to context directory")
 	runCmd.Flags().StringVar(&inputPath, "input", "", "Path to input directory (default: creates temp dir, auto-cleaned)")

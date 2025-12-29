@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/holon-run/holon/pkg/agent"
 	"github.com/holon-run/holon/pkg/agent/resolver"
 	v1 "github.com/holon-run/holon/pkg/api/v1"
 	"github.com/holon-run/holon/pkg/context/collector"
@@ -35,6 +36,8 @@ type RunnerConfig struct {
 	TaskName             string
 	BaseImage            string
 	AgentBundle          string
+	AgentChannel         string // Agent channel: "latest", "builtin", "pinned:<version>"
+	AgentChannelSource   string // Source of AgentChannel: "cli", "config", "default"
 	WorkspacePath        string
 	ContextPath          string
 	InputPath            string // Optional: path to input directory (if empty, creates temp dir)
@@ -343,17 +346,34 @@ func (r *Runner) resolveAgentBundle(ctx context.Context, cfg RunnerConfig, works
 		return resolvedPath, nil
 	}
 
-	// Try builtin agent (auto-install) first
-	holonlog.Info("no agent specified, trying builtin default agent")
-	resolvedPath, err := r.resolver.Resolve(ctx, "") // Empty string triggers builtin resolver
-	if err == nil {
-		holonlog.Info("successfully resolved builtin agent", "path", resolvedPath)
-		return resolvedPath, nil
+	// No explicit agent - use channel-based resolver
+	channel := cfg.AgentChannel
+	if channel == "" {
+		channel = "latest" // Default channel
 	}
 
-	// If builtin agent failed (e.g., auto-install disabled), fall back to local build system
-	holonlog.Debug("builtin agent not available", "error", err)
-	holonlog.Info("falling back to local build system")
+	// Use channel resolver (unless auto-install is disabled AND channel is from default)
+	// If channel is explicitly specified (CLI or config), respect it regardless of HOLON_NO_AUTO_INSTALL
+	var resolvedPath string
+	var err error
+	channelIsExplicit := cfg.AgentChannelSource == "cli" || cfg.AgentChannelSource == "config"
+	if !agent.IsAutoInstallDisabled() || channelIsExplicit {
+		cacheDir := os.Getenv("HOLON_CACHE_DIR")
+		channelResolver := resolver.NewChannelResolver(cacheDir, channel, "holon-run/holon")
+
+		holonlog.Info("resolving agent via channel", "channel", channel)
+		resolvedPath, err = channelResolver.Resolve(ctx, "")
+		if err == nil {
+			holonlog.Info("successfully resolved agent via channel", "channel", channel, "path", resolvedPath)
+			return resolvedPath, nil
+		}
+
+		// Channel resolution failed - log and fall back to local build system
+		holonlog.Debug("channel resolver failed", "channel", channel, "error", err)
+		holonlog.Info("falling back to local build system")
+	} else {
+		holonlog.Info("auto-install disabled, using local build system")
+	}
 
 	scriptPath := filepath.Join(workspace, "agents", "claude", "scripts", "build-bundle.sh")
 	if _, err := os.Stat(scriptPath); err != nil {
