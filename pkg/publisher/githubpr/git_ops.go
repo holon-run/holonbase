@@ -222,16 +222,36 @@ func (g *GitClient) Push(branchName string) error {
 func (g *GitClient) configureGitCredentials(ctx context.Context) error {
 	client := holonGit.NewClient(g.WorkspaceDir)
 
+	// Validate token is not empty
+	if g.Token == "" {
+		return fmt.Errorf("github token is empty: please set HOLON_GITHUB_TOKEN or GITHUB_TOKEN environment variable")
+	}
+
 	// Configure git to use the token via the extraheader
 	// This is a common pattern for GitHub authentication.
 	// Note: This persists credentials in .git/config. A more secure approach would use
 	// GIT_ASKPASS with temporary helpers, which is deferred to a follow-up improvement.
 	authHeader := fmt.Sprintf("Authorization: Bearer %s", g.Token)
+	holonlog.Debug("configuring git credentials", "header_prefix", "Authorization: Bearer ***")
 
-	_, err := client.ExecCommand(ctx, "config", "--local", "http.https://github.com/.extraheader", authHeader)
+	output, err := client.ExecCommand(ctx, "config", "--local", "http.https://github.com/.extraheader", authHeader)
 	if err != nil {
-		// Non-fatal error - continue with push attempt
-		holonlog.Warn("failed to configure git credential helper", "error", err)
+		// This is a fatal error - push will fail without credentials
+		return fmt.Errorf("failed to configure git credential helper: %w (output: %s)", err, string(output))
+	}
+
+	// Verify the configuration was set
+	verifyOutput, err := client.ExecCommand(ctx, "config", "--local", "--get", "http.https://github.com/.extraheader")
+	if err != nil {
+		holonlog.Warn("failed to verify git credential configuration", "error", err)
+	} else {
+		// Safely truncate output for logging (avoid panic if output < 20 chars)
+		verifyStr := string(verifyOutput)
+		prefixLen := 20
+		if len(verifyStr) < prefixLen {
+			prefixLen = len(verifyStr)
+		}
+		holonlog.Debug("git credentials configured successfully", "header_prefix", verifyStr[:prefixLen]+"...")
 	}
 
 	return nil

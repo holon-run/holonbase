@@ -646,7 +646,7 @@ func TestTypeConversions(t *testing.T) {
 func TestGetTokenFromEnv(t *testing.T) {
 	// Save original env vars and restore after test
 	origToken := os.Getenv(TokenEnv)
-	origLegacyToken := os.Getenv(LegacyTokenEnv)
+	origLegacyToken := os.Getenv(HolonTokenEnv)
 	defer func() {
 		if origToken != "" {
 			os.Setenv(TokenEnv, origToken)
@@ -654,15 +654,29 @@ func TestGetTokenFromEnv(t *testing.T) {
 			os.Unsetenv(TokenEnv)
 		}
 		if origLegacyToken != "" {
-			os.Setenv(LegacyTokenEnv, origLegacyToken)
+			os.Setenv(HolonTokenEnv, origLegacyToken)
 		} else {
-			os.Unsetenv(LegacyTokenEnv)
+			os.Unsetenv(HolonTokenEnv)
 		}
 	}()
 
-	t.Run("GITHUB_TOKEN set", func(t *testing.T) {
+	t.Run("HOLON_GITHUB_TOKEN has highest priority", func(t *testing.T) {
+		os.Setenv(HolonTokenEnv, "holon-token-999")
 		os.Setenv(TokenEnv, "env-token-123")
-		os.Unsetenv(LegacyTokenEnv)
+
+		token, fromGh := GetTokenFromEnv()
+
+		if token != "holon-token-999" {
+			t.Errorf("Token = %q, want %q", token, "holon-token-999")
+		}
+		if fromGh {
+			t.Error("Expected fromGh to be false when HOLON_GITHUB_TOKEN is set")
+		}
+	})
+
+	t.Run("GITHUB_TOKEN set (no HOLON_GITHUB_TOKEN)", func(t *testing.T) {
+		os.Unsetenv(HolonTokenEnv)
+		os.Setenv(TokenEnv, "env-token-123")
 
 		token, fromGh := GetTokenFromEnv()
 
@@ -674,37 +688,23 @@ func TestGetTokenFromEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("HOLON_GITHUB_TOKEN set", func(t *testing.T) {
-		os.Unsetenv(TokenEnv)
-		os.Setenv(LegacyTokenEnv, "legacy-token-456")
+	t.Run("priority: HOLON_GITHUB_TOKEN > GITHUB_TOKEN", func(t *testing.T) {
+		os.Setenv(HolonTokenEnv, "holon-token")
+		os.Setenv(TokenEnv, "ci-token")
 
 		token, fromGh := GetTokenFromEnv()
 
-		if token != "legacy-token-456" {
-			t.Errorf("Token = %q, want %q", token, "legacy-token-456")
+		if token != "holon-token" {
+			t.Errorf("Token = %q, want %q (HOLON_GITHUB_TOKEN should override GITHUB_TOKEN)", token, "holon-token")
 		}
 		if fromGh {
 			t.Error("Expected fromGh to be false when HOLON_GITHUB_TOKEN is set")
 		}
 	})
 
-	t.Run("both env vars set, GITHUB_TOKEN takes precedence", func(t *testing.T) {
-		os.Setenv(TokenEnv, "primary-token")
-		os.Setenv(LegacyTokenEnv, "legacy-token")
-
-		token, fromGh := GetTokenFromEnv()
-
-		if token != "primary-token" {
-			t.Errorf("Token = %q, want %q", token, "primary-token")
-		}
-		if fromGh {
-			t.Error("Expected fromGh to be false when GITHUB_TOKEN is set")
-		}
-	})
-
 	t.Run("no env vars, falls back to gh CLI if available", func(t *testing.T) {
+		os.Unsetenv(HolonTokenEnv)
 		os.Unsetenv(TokenEnv)
-		os.Unsetenv(LegacyTokenEnv)
 
 		token, fromGh := GetTokenFromEnv()
 
@@ -722,7 +722,7 @@ func TestGetTokenFromEnv(t *testing.T) {
 func TestNewClientFromEnv(t *testing.T) {
 	// Save original env vars and restore after test
 	origToken := os.Getenv(TokenEnv)
-	origLegacyToken := os.Getenv(LegacyTokenEnv)
+	origLegacyToken := os.Getenv(HolonTokenEnv)
 	defer func() {
 		if origToken != "" {
 			os.Setenv(TokenEnv, origToken)
@@ -730,15 +730,15 @@ func TestNewClientFromEnv(t *testing.T) {
 			os.Unsetenv(TokenEnv)
 		}
 		if origLegacyToken != "" {
-			os.Setenv(LegacyTokenEnv, origLegacyToken)
+			os.Setenv(HolonTokenEnv, origLegacyToken)
 		} else {
-			os.Unsetenv(LegacyTokenEnv)
+			os.Unsetenv(HolonTokenEnv)
 		}
 	}()
 
 	t.Run("with GITHUB_TOKEN set", func(t *testing.T) {
 		os.Setenv(TokenEnv, "test-token-123")
-		os.Unsetenv(LegacyTokenEnv)
+		os.Unsetenv(HolonTokenEnv)
 
 		client, err := NewClientFromEnv()
 		if err != nil {
@@ -754,7 +754,7 @@ func TestNewClientFromEnv(t *testing.T) {
 
 	t.Run("with HOLON_GITHUB_TOKEN set", func(t *testing.T) {
 		os.Unsetenv(TokenEnv)
-		os.Setenv(LegacyTokenEnv, "legacy-token-456")
+		os.Setenv(HolonTokenEnv, "holon-token-456")
 
 		client, err := NewClientFromEnv()
 		if err != nil {
@@ -763,21 +763,21 @@ func TestNewClientFromEnv(t *testing.T) {
 		if client == nil {
 			t.Fatal("Expected non-nil client")
 		}
-		if client.GetToken() != "legacy-token-456" {
-			t.Errorf("Token = %q, want %q", client.GetToken(), "legacy-token-456")
+		if client.GetToken() != "holon-token-456" {
+			t.Errorf("Token = %q, want %q", client.GetToken(), "holon-token-456")
 		}
 	})
 
 	t.Run("with no env vars, may use gh CLI if available", func(t *testing.T) {
 		os.Unsetenv(TokenEnv)
-		os.Unsetenv(LegacyTokenEnv)
+		os.Unsetenv(HolonTokenEnv)
 
 		client, err := NewClientFromEnv()
 		// If gh CLI is available and authenticated, this should succeed
 		// If gh CLI is not available, this should return an error
 		if err != nil {
 			// Expected when gh CLI is not available
-			if !strings.Contains(err.Error(), TokenEnv) && !strings.Contains(err.Error(), LegacyTokenEnv) {
+			if !strings.Contains(err.Error(), TokenEnv) && !strings.Contains(err.Error(), HolonTokenEnv) {
 				t.Errorf("Error should mention env vars or gh login, got: %v", err)
 			}
 			return
