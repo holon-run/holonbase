@@ -328,12 +328,11 @@ jobs:
           ISSUE_NUMBER: ${{ steps.ctx.outputs.issue_number }}
           EVENT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
-      - name: Checkout repository (PR head)
+      - name: Checkout repository (PR)
         if: steps.gate.outputs.should_run == 'true' && steps.ctx.outputs.is_pr == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.pr-ref.outputs.ref }}
-          fetch-depth: 0
 
       - name: Detect execution mode
         id: detect
@@ -422,7 +421,7 @@ jobs:
       - name: Run Holon
         id: run
         if: steps.gate.outputs.should_run == 'true'
-        uses: ./
+        uses: holon-run/holon@main
         env:
           HOLON_MODEL: ${{ vars.HOLON_MODEL || 'claude-sonnet-4-5-20250929' }}
         with:
