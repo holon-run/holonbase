@@ -40,10 +40,12 @@ jobs:
     with:
       issue_number: ${{ github.event.issue.number || github.event.pull_request.number }}
       comment_id: ${{ github.event.comment.id }}
-    secrets: inherit
+    secrets:
+      anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }} # 必填输入
+      anthropic_base_url: ${{ secrets.ANTHROPIC_BASE_URL }}
 ```
 
-3) 配置密钥 `ANTHROPIC_AUTH_TOKEN`。`holon-solve` 会根据事件自动推导模式/上下文/输出目录并无交互运行代理。
+3) 配置密钥 `ANTHROPIC_AUTH_TOKEN`（确保该 repo 能访问），并通过 `secrets:` 映射传入，如上所示。`holon-solve` 会根据事件自动推导模式/上下文/输出目录并无交互运行代理。
 
 可选：直接使用 Composite Action 并上传制品：
 ```yaml

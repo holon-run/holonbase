@@ -40,10 +40,12 @@ jobs:
     with:
       issue_number: ${{ github.event.issue.number || github.event.pull_request.number }}
       comment_id: ${{ github.event.comment.id }}
-    secrets: inherit
+    secrets:
+      anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }} # required
+      anthropic_base_url: ${{ secrets.ANTHROPIC_BASE_URL }}
 ```
 
-3) Set secret `ANTHROPIC_AUTH_TOKEN`. `holon-solve` will derive mode/context/output dir from the event and run the agent headlessly.
+3) Set secret `ANTHROPIC_AUTH_TOKEN` (org/repo visible) and pass it via the `secrets:` map as shown. `holon-solve` will derive mode/context/output dir from the event and run the agent headlessly.
 
 ## Local CLI (`holon solve`)
 Prereqs: Docker, Anthropic token (`ANTHROPIC_AUTH_TOKEN`), GitHub token (`GITHUB_TOKEN` or `HOLON_GITHUB_TOKEN` or `gh auth login`), optional base image (auto-detects from repo).

@@ -34,7 +34,7 @@ inputs:
   holonbot_broker_url:
     description: 'URL of the Holonbot Token Broker'
     required: false
-    default: 'https://holon-one.vercel.app/api/exchange-token'
+    default: 'https://bot.holon.run/api/exchange-token'
   log_level:
     description: 'Log level for CI visibility (debug, info, progress, minimal)'
     required: false
