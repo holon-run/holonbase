@@ -167,3 +167,194 @@ When CI/check runs fail, test failure logs are downloaded to `/holon/input/conte
 
 **Context Files:**
 Additional context files may be provided in `/holon/input/context/`. Read them if they contain relevant information for addressing the review comments or CI failures.
+
+**Test Failure Diagnosis and Reproduction:**
+
+When CI tests fail, follow this proactive workflow:
+
+### Decision Tree
+
+```
+Test failure detected
+  ↓
+Are CI logs sufficient?
+  ↓ YES                              ↓ NO
+  ↓                                  ↓
+Analyze logs → Determine           Attempt to reproduce locally
+relevance → Fix or not-applicable   ↓ Can run test?
+                                    ↓ YES                 ↓ NO
+                                    ↓                      ↓
+                              Run test → Can          Check if test requires
+                              reproduce?              unavailable resources
+                              ↓ YES   ↓ NO            ↓ Requires unavailable?
+                              ↓       ↓                ↓ YES
+                              ↓       Investigate      ↓
+                        Analyze → environment         Mark as unfixed
+                        Fix or   differences          with explanation
+                        not-    ↓ Can explain?
+                        applicable ↓ YES     ↓ NO
+                                 ↓         ↓
+                            Fix env  Mark as
+                            or doc   unfixed
+```
+
+### Step 1: Check Available Information
+
+1. **Read CI logs** (if available):
+   - Check `/holon/input/context/github/test-failure-logs.txt` for failure details
+   - Search for specific failures (FAIL, error, exception patterns)
+   - Identify failing test names and stack traces
+
+2. **Read check_runs.json** for test names and failure details:
+   - Check `/holon/input/context/github/check_runs.json` for structured test failure information
+   - Extract test names, job IDs, and failure summaries
+
+3. **If logs are complete and clear**:
+   - Analyze the error message
+   - Check stack trace for file/line information
+   - Determine if failure relates to PR changes
+   - Proceed with fix or mark as not-applicable
+
+4. **If logs are incomplete or missing**:
+   - Proceed to Step 2 (attempt reproduction)
+
+### Step 2: Attempt Local Reproduction
+
+Before marking a check as `unfixed`, always try to reproduce the failure:
+
+#### 2.1. Identify the test
+
+From CI logs or check_runs.json:
+- Test name: e.g., `TestRunner_Run_EnvVariablePrecedence`
+- Package/module: e.g., `cmd/holon/runner_test.go`
+- Language: Go, JavaScript/TypeScript, Python, etc.
+
+#### 2.2. Run the test locally
+
+**Run the failing test** to reproduce the issue:
+- Determine the appropriate test command for the project's language/framework
+- Check project documentation (README, CONTRIBUTING.md, package.json, Makefile, etc.) for test commands
+- Run the specific failing test identified from CI logs or check_runs.json
+- Use appropriate verbosity flags to see detailed error messages
+
+**Common test patterns** (examples - adapt to project):
+- Use `make test`, `npm test`, `pytest`, `go test`, `cargo test`, etc. based on project setup
+- Run specific tests by name when possible for faster debugging
+- Check CI configuration files (`.github/workflows/*.yml`, `.gitlab-ci.yml`, etc.) for exact commands used
+
+#### 2.3. Analyze the result
+
+**If reproduction succeeds** (test fails locally):
+
+1. Read the error message carefully
+2. Examine the stack trace
+3. Identify which file/line is failing
+4. Check if PR modified that file or related code
+5. **Decision**:
+   - **Related to PR changes** → Fix it and mark as `fixed`
+   - **Not related to PR changes** → Mark as `not-applicable`
+   - **Uncertain** → Investigate further (check imports, dependencies, test setup)
+
+**If reproduction fails** (test passes locally):
+
+1. Check for environment differences:
+   - Verify language/runtime versions match CI environment
+   - Check for required environment variables (use project documentation or CI config as reference)
+   - Check for test isolation issues (does test pass when run alone vs with other tests?)
+   - Verify all required dependencies and services are available
+
+2. Review PR changes for:
+   - Version-specific code
+   - Conditional logic based on environment
+   - Platform-specific behavior
+   - Time/date dependencies
+
+3. **Decision**:
+   - **Can explain difference** → Fix environment compatibility or document
+   - **Cannot explain** → Mark as `unfixed` with detailed explanation
+
+### Step 3: When to Mark as `unfixed`
+
+Only mark as `unfixed` when **ONE** of these conditions is met:
+
+**Condition A: Unable to reproduce AND ALL of:**
+1. Test passes locally despite efforts
+2. Cannot explain CI failure (environment differences unclear)
+3. No available workaround or diagnostic access
+
+**Condition B: Cannot run test because:**
+1. Test requires unavailable resources:
+   - External database (PostgreSQL, MongoDB, etc.)
+   - External API/services
+   - Specific hardware or environment
+   - Proprietary dependencies
+   - Network access not available in container
+
+**Always include detailed explanation** in the `message` field:
+
+```json
+{
+  "name": "ci/integration-tests",
+  "conclusion": "failure",
+  "fix_status": "unfixed",
+  "message": "**Test**: `TestDatabaseIntegration`\n\n**Attempts**:\n1. Checked CI logs: Insufficient error details\n2. Tried running locally: Failed - requires PostgreSQL database\n3. Checked for Docker compose: No permissions to start services\n4. Reviewed PR changes: Only README.md modified\n\n**Conclusion**:\nCannot reproduce or diagnose without database access. README changes are extremely unlikely to affect database integration tests.\n\n**Recommendation**:\nRequires manual review with database environment access or access to CI environment for debugging."
+}
+```
+
+### Step 4: Common Scenarios and Examples
+
+#### Scenario 1: Logs Complete + Reproducible
+
+```
+CI logs: Clear error message and stack trace
+Local run: Same error
+Analysis: Related to PR changes
+Action: Fix the code, mark as "fixed"
+```
+
+#### Scenario 2: Logs Incomplete + Reproducible
+
+```
+CI logs: "Test failed" (no details)
+Local run: "expected X, got Y" with clear error
+Analysis: Error message clarifies the issue, related to PR changes
+Action: Fix based on local error, mark as "fixed"
+```
+
+#### Scenario 3: Logs Complete + Not Reproducible
+
+```
+CI logs: "Timeout after 5min"
+Local run: Passes immediately
+Investigation: CI uses slower machines, test has timing dependency
+Analysis: Flaky test or environment-specific issue
+Action: Mark as "unfixed" with explanation about environment differences
+```
+
+#### Scenario 4: Cannot Run Test
+
+```
+Test: Requires database
+Environment: Container without DB
+Attempt: Cannot start database
+Action: Mark as "unfixed"
+Explanation: "Test requires PostgreSQL database which is unavailable in container environment. Reviewed PR changes and confirmed no database-related code was modified."
+```
+
+#### Scenario 5: Unrelated Test Failure
+
+```
+Test: Fails with error in package X
+PR changes: Only modifies package Y
+Local run: Same failure (pre-existing issue)
+Analysis: Test failure existed before PR changes (also fails on main/base branch)
+Action: Mark as "not-applicable" with explanation that this is a pre-existing issue not related to PR changes
+```
+
+### Key Principles
+
+1. **Active over passive**: Try to reproduce before giving up
+2. **Local execution preferred**: Running tests provides more information than reading logs
+3. **Transparent decisions**: Always document your reasoning and attempts
+4. **Last resort unfixed**: Only mark as `unfixed` when truly unable to diagnose or fix
+5. **Check test relevance**: Verify the failing test relates to PR changes before marking as `fixed`
