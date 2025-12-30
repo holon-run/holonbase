@@ -45,7 +45,7 @@ jobs:
       anthropic_base_url: ${{ secrets.ANTHROPIC_BASE_URL }}
 ```
 
-3) Set secret `ANTHROPIC_AUTH_TOKEN` (org/repo visible) and pass it via the `secrets:` map as shown. `holon-solve` will derive mode/context/output dir from the event and run the agent headlessly.
+3) Set secret `ANTHROPIC_AUTH_TOKEN` (org/repo visible) and pass it via the `secrets:` map as shown. `holon-solve` will derive mode/context/output dir from the event and run the agent headlessly. Ready-to-use workflow: copy `examples/workflows/holon-trigger.yml` into your repo for a working trigger.
 
 ## Local CLI (`holon solve`)
 Prereqs: Docker, Anthropic token (`ANTHROPIC_AUTH_TOKEN`), GitHub token (`GITHUB_TOKEN` or `HOLON_GITHUB_TOKEN` or `gh auth login`), optional base image (auto-detects from repo).
