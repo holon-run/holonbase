@@ -9,6 +9,7 @@ import { readBundleManifest, getAgentMetadata } from "./bundleMetadata.js";
 
 // Re-export for testing
 export { readBundleManifest, getAgentMetadata } from "./bundleMetadata.js";
+export { loadSkillsFromSpec };
 
 enum LogLevel {
   DEBUG = "debug",
@@ -263,6 +264,33 @@ async function connectivityCheck(logger: ProgressLogger, baseUrl: string): Promi
   }
 }
 
+interface SkillMetadata {
+  name: string;
+}
+
+async function loadSkillsFromSpec(spec: Record<string, any>, logger: ProgressLogger): Promise<SkillMetadata[]> {
+  try {
+    // Skills can be in metadata.skills
+    if (spec.metadata?.skills && Array.isArray(spec.metadata.skills)) {
+      const skills: SkillMetadata[] = [];
+      for (const skillPath of spec.metadata.skills) {
+        // Normalize skill path to string and extract skill name
+        const skillPathStr = String(skillPath);
+        const skillName = path.basename(skillPathStr);
+        skills.push({
+          name: skillName,
+        });
+      }
+      return skills;
+    }
+
+    return [];
+  } catch (error) {
+    logger.debug(`Failed to load skills from spec: ${String(error)}`);
+    return [];
+  }
+}
+
 async function runClaude(
   logger: ProgressLogger,
   workspacePath: string,
@@ -309,6 +337,9 @@ async function runClaude(
   const model = env.HOLON_MODEL;
   const fallbackModel = env.HOLON_FALLBACK_MODEL;
   const abortController = new AbortController();
+
+  // Explicitly include Skill in allowed tools
+  // This is required when using bypassPermissions mode
   const options: Options = {
     cwd: workspacePath,
     env,
@@ -318,6 +349,7 @@ async function runClaude(
     systemPrompt: { type: "preset", preset: "claude_code", append: systemInstruction },
     settingSources: ["user", "project"],
     tools: { type: "preset", preset: "claude_code" },
+    allowedTools: ["Skill"], // Explicitly enable Skill tool
     stderr: (data: string) => {
       logFile.write(`[stderr] ${data}`);
       logger.debug(data.trim());
@@ -549,6 +581,16 @@ async function runAgent(): Promise<void> {
   await syncClaudeSettings(logger, authToken, baseUrl);
   await connectivityCheck(logger, baseUrl);
 
+  // Load skills from spec for logging and manifest metadata
+  const enabledSkills = await loadSkillsFromSpec(spec, logger);
+
+  // Log enabled skills at startup (info level)
+  if (enabledSkills.length > 0) {
+    logger.info(`Enabled skills (${enabledSkills.length}): ${enabledSkills.map((s) => s.name).join(", ")}`);
+  } else {
+    logger.info("No explicit skills configured");
+  }
+
   const logFilePath = path.join(evidenceDir, "execution.log");
   const logFile = fs.createWriteStream(logFilePath, { flags: "w" });
 
@@ -699,6 +741,7 @@ async function runAgent(): Promise<void> {
         version: agentMetadata.version,
         mode: mode,
         ...(agentMetadata.engine && { engine: agentMetadata.engine }),
+        ...(enabledSkills.length > 0 && { skills: enabledSkills.map((s) => s.name) }),
       },
       status: "completed",
       outcome: success ? "success" : "failure",
@@ -746,6 +789,7 @@ async function runAgent(): Promise<void> {
         version: agentMetadata.version,
         mode: mode,
         ...(agentMetadata.engine && { engine: agentMetadata.engine }),
+        ...(enabledSkills.length > 0 && { skills: enabledSkills.map((s) => s.name) }),
       },
       status: "completed",
       outcome: "failure",
