@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/client"
 	holonlog "github.com/holon-run/holon/pkg/log"
 	"github.com/holon-run/holon/pkg/git"
+	"github.com/holon-run/holon/pkg/skills"
 	"github.com/holon-run/holon/pkg/workspace"
 )
 
@@ -57,6 +58,9 @@ type ContainerConfig struct {
 	// host git config > ProjectConfig > env vars > defaults
 	GitAuthorName  string // Git author name for commits
 	GitAuthorEmail string // Git author email for commits
+
+	// Skills configuration
+	Skills []string // Paths to skill directories to include
 }
 
 func (r *Runtime) RunHolon(ctx context.Context, cfg *ContainerConfig) (string, error) {
@@ -470,6 +474,21 @@ func prepareWorkspace(ctx context.Context, cfg *ContainerConfig) (string, worksp
 			return "", nil, fmt.Errorf("failed to prepare temporary workspace: %w", err)
 		}
 
+		// Stage skills to workspace
+		resolvedSkills, err := resolveSkills(ctx, cfg)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to resolve skills: %w", err)
+		}
+		if len(resolvedSkills) > 0 {
+			holonlog.Info("staging skills", "count", len(resolvedSkills))
+			if err := skills.Stage(cfg.Workspace, resolvedSkills); err != nil {
+				return "", nil, fmt.Errorf("failed to stage skills: %w", err)
+			}
+			for _, skill := range resolvedSkills {
+				holonlog.Debug("staged skill", "name", skill.Name, "source", skill.Source)
+			}
+		}
+
 		// Write workspace manifest to output directory if specified
 		if cfg.OutDir != "" {
 			if err := writeWorkspaceManifest(cfg.OutDir, prepareResult); err != nil {
@@ -557,6 +576,21 @@ func prepareWorkspace(ctx context.Context, cfg *ContainerConfig) (string, worksp
 		holonlog.Info("workspace note", "note", note)
 	}
 
+	// Stage skills to snapshot workspace
+	resolvedSkills, err := resolveSkills(ctx, cfg)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to resolve skills: %w", err)
+	}
+	if len(resolvedSkills) > 0 {
+		holonlog.Info("staging skills", "count", len(resolvedSkills))
+		if err := skills.Stage(snapshotDir, resolvedSkills); err != nil {
+			return "", nil, fmt.Errorf("failed to stage skills: %w", err)
+		}
+		for _, skill := range resolvedSkills {
+			holonlog.Debug("staged skill", "name", skill.Name, "source", skill.Source)
+		}
+	}
+
 	// Write workspace manifest to output directory (not workspace)
 	// This avoids polluting the workspace with metadata files
 	if cfg.OutDir != "" {
@@ -577,6 +611,53 @@ func writeWorkspaceManifest(outDir string, result workspace.PrepareResult) error
 
 	// Delegate to the shared workspace manifest writer to avoid duplicating logic
 	return workspace.WriteManifest(outDir, result)
+}
+
+// resolveSkills validates skills from ContainerConfig.Skills and merges with auto-discovered skills
+// Returns empty list if no skills are configured
+func resolveSkills(ctx context.Context, cfg *ContainerConfig) ([]skills.Skill, error) {
+	resolver := skills.NewResolver(cfg.Workspace)
+
+	// If no skills explicitly provided, just auto-discover from workspace
+	if len(cfg.Skills) == 0 {
+		return resolver.Resolve([]string{}, []string{}, []string{})
+	}
+
+	// Skills are already resolved by caller (cmd/holon/main.go with proper precedence)
+	// Just validate and normalize them to Skill structs
+	var validated []skills.Skill
+	for _, path := range cfg.Skills {
+		skill, err := resolver.ValidateAndNormalize(path, "cli")
+		if err != nil {
+			return nil, fmt.Errorf("invalid skill path: %w", err)
+		}
+		validated = append(validated, skill)
+	}
+
+	// Auto-discover additional skills from workspace (add those not already specified)
+	discovered, err := resolver.Resolve([]string{}, []string{}, []string{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover skills: %w", err)
+	}
+
+	// Merge validated and discovered skills (validated take precedence)
+	for _, skill := range discovered {
+		if !containsSkill(validated, skill) {
+			validated = append(validated, skill)
+		}
+	}
+
+	return validated, nil
+}
+
+// containsSkill checks if a skill is already in the list (by path)
+func containsSkill(skills []skills.Skill, skill skills.Skill) bool {
+	for _, s := range skills {
+		if s.Path == skill.Path {
+			return true
+		}
+	}
+	return false
 }
 
 // isIncompatibleClaudeConfig checks if a ~/.claude config directory appears
