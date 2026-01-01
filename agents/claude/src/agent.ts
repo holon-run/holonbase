@@ -5,6 +5,10 @@ import { spawnSync } from "child_process";
 import { parse as parseYaml } from "yaml";
 import { query } from "./claudeSdk.js";
 import type { Options } from "./claudeSdk.js";
+import { readBundleManifest, getAgentMetadata } from "./bundleMetadata.js";
+
+// Re-export for testing
+export { readBundleManifest, getAgentMetadata } from "./bundleMetadata.js";
 
 enum LogLevel {
   DEBUG = "debug",
@@ -685,11 +689,16 @@ async function runAgent(): Promise<void> {
 
     logger.progress(`Generated patch: ${patchContent.length} characters`);
 
+    // Read bundle manifest to derive agent metadata
+    const bundleManifest = readBundleManifest();
+    const agentMetadata = getAgentMetadata(bundleManifest);
+
     const manifest = {
       metadata: {
-        agent: "claude-code",
-        version: "0.1.0",
+        agent: agentMetadata.agent,
+        version: agentMetadata.version,
         mode: mode,
+        ...(agentMetadata.engine && { engine: agentMetadata.engine }),
       },
       status: "completed",
       outcome: success ? "success" : "failure",
@@ -727,11 +736,16 @@ async function runAgent(): Promise<void> {
     const durationSeconds = (Date.now() - startTime) / 1000;
     logger.logOutcome(false, durationSeconds, String(error));
 
+    // Read bundle manifest to derive agent metadata
+    const bundleManifest = readBundleManifest();
+    const agentMetadata = getAgentMetadata(bundleManifest);
+
     const manifest = {
       metadata: {
-        agent: "claude-code",
-        version: "0.1.0",
+        agent: agentMetadata.agent,
+        version: agentMetadata.version,
         mode: mode,
+        ...(agentMetadata.engine && { engine: agentMetadata.engine }),
       },
       status: "completed",
       outcome: "failure",
@@ -747,7 +761,15 @@ async function runAgent(): Promise<void> {
   }
 }
 
-runAgent().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Only run agent when executed as main module, not when imported as a dependency
+// This check prevents the agent from auto-running when tests import the module
+// The spec file path only exists in actual Holon execution environment
+const SPEC_PATH = "/holon/input/spec.yaml";
+const shouldRunAutomatically = fs.existsSync(SPEC_PATH);
+
+if (shouldRunAutomatically) {
+  runAgent().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

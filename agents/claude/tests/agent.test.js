@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { test, describe, mock, beforeEach, afterEach } from "node:test";
+import { test, describe, mock, before, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import { fileURLToPath } from "url";
 
@@ -513,5 +513,170 @@ describe("Git Diff Command Generation", () => {
     assert.strictEqual(result.status, 1);
 
     // Should not throw when allowFailure is true
+  });
+});
+
+describe("Bundle Manifest Metadata", () => {
+  let tempDir;
+  // Import the actual functions to test
+  let getAgentMetadata;
+  let readBundleManifest;
+
+  before(async () => {
+    // Dynamic import to test the exported functions
+    const agentModule = await import("../dist/agent.js");
+    getAgentMetadata = agentModule.getAgentMetadata;
+    readBundleManifest = agentModule.readBundleManifest;
+  });
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "holon-bundle-test-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("getAgentMetadata derives from bundle manifest with engine.name", () => {
+    const bundleManifest = {
+      bundleVersion: "1",
+      name: "agent-claude",
+      version: "0.6.1",
+      engine: {
+        name: "claude-code",
+        sdk: "@anthropic-ai/claude-agent-sdk",
+        sdkVersion: "0.1.75",
+      },
+    };
+
+    const metadata = getAgentMetadata(bundleManifest);
+
+    assert.strictEqual(metadata.agent, "claude-code");
+    assert.strictEqual(metadata.version, "0.6.1");
+    assert.notStrictEqual(metadata.engine, undefined);
+    assert.strictEqual(metadata.engine.sdk, "@anthropic-ai/claude-agent-sdk");
+    assert.strictEqual(metadata.engine.sdkVersion, "0.1.75");
+  });
+
+  test("getAgentMetadata derives from bundle manifest without engine.name", () => {
+    const bundleManifest = {
+      bundleVersion: "1",
+      name: "my-custom-agent",
+      version: "1.2.3",
+    };
+
+    const metadata = getAgentMetadata(bundleManifest);
+
+    assert.strictEqual(metadata.agent, "my-custom-agent");
+    assert.strictEqual(metadata.version, "1.2.3");
+    assert.strictEqual(metadata.engine, undefined);
+  });
+
+  test("getAgentMetadata uses fallback defaults when bundle manifest is null", () => {
+    const metadata = getAgentMetadata(null);
+
+    assert.strictEqual(metadata.agent, "claude-code");
+    assert.strictEqual(metadata.version, "0.1.0");
+    assert.strictEqual(metadata.engine, undefined);
+  });
+
+  test("getAgentMetadata handles bundle manifest with missing version", () => {
+    const bundleManifest = {
+      bundleVersion: "1",
+      name: "agent-claude",
+      engine: {
+        name: "claude-code",
+      },
+    };
+
+    const metadata = getAgentMetadata(bundleManifest);
+
+    assert.strictEqual(metadata.agent, "claude-code");
+    assert.strictEqual(metadata.version, "0.1.0"); // Fallback default
+    assert.strictEqual(metadata.engine, undefined);
+  });
+
+  test("getAgentMetadata only includes defined engine SDK fields", () => {
+    // Test when only sdk is present
+    const bundleManifest1 = {
+      bundleVersion: "1",
+      name: "agent-claude",
+      version: "0.6.1",
+      engine: {
+        name: "claude-code",
+        sdk: "@anthropic-ai/claude-agent-sdk",
+      },
+    };
+
+    const metadata1 = getAgentMetadata(bundleManifest1);
+
+    assert.notStrictEqual(metadata1.engine, undefined);
+    assert.strictEqual(metadata1.engine.sdk, "@anthropic-ai/claude-agent-sdk");
+    assert.strictEqual(metadata1.engine.sdkVersion, undefined);
+
+    // Test when only sdkVersion is present
+    const bundleManifest2 = {
+      bundleVersion: "1",
+      name: "agent-claude",
+      version: "0.6.1",
+      engine: {
+        name: "claude-code",
+        sdkVersion: "0.1.75",
+      },
+    };
+
+    const metadata2 = getAgentMetadata(bundleManifest2);
+
+    assert.notStrictEqual(metadata2.engine, undefined);
+    assert.strictEqual(metadata2.engine.sdk, undefined);
+    assert.strictEqual(metadata2.engine.sdkVersion, "0.1.75");
+  });
+
+  test("readBundleManifest returns null when file does not exist", () => {
+    const manifestPath = path.join(tempDir, "nonexistent-manifest.json");
+    const result = readBundleManifest(manifestPath);
+
+    assert.strictEqual(result, null);
+  });
+
+  test("readBundleManifest returns null for invalid JSON", () => {
+    const manifestPath = path.join(tempDir, "invalid-manifest.json");
+    fs.writeFileSync(manifestPath, "invalid json content {");
+
+    const result = readBundleManifest(manifestPath);
+
+    assert.strictEqual(result, null);
+  });
+
+  test("readBundleManifest parses valid bundle manifest", () => {
+    const manifestPath = path.join(tempDir, "manifest.json");
+    const validManifest = {
+      bundleVersion: "1",
+      name: "agent-claude",
+      version: "0.6.1",
+      engine: {
+        name: "claude-code",
+        sdk: "@anthropic-ai/claude-agent-sdk",
+        sdkVersion: "0.1.75",
+      },
+    };
+    fs.writeFileSync(manifestPath, JSON.stringify(validManifest, null, 2));
+
+    const result = readBundleManifest(manifestPath);
+
+    assert.notStrictEqual(result, null);
+    assert.strictEqual(result.bundleVersion, "1");
+    assert.strictEqual(result.name, "agent-claude");
+    assert.strictEqual(result.version, "0.6.1");
+    assert.strictEqual(result.engine.name, "claude-code");
+  });
+
+  test("readBundleManifest uses default path when not specified", () => {
+    // When called without arguments, should use default path
+    // If the manifest exists, it should return a parsed object
+    const result = readBundleManifest();
+    // The result could be null if manifest doesn't exist, or an object if it does
+    // We just verify it doesn't throw
+    assert.ok(result === null || typeof result === "object");
   });
 });
