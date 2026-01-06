@@ -93,14 +93,31 @@ Skills are organized by platform and scenario:
         └── SKILL.md       # Generate reports from local files
 ```
 
-### 4.2 Skill Loading
+### 4.2 Skill Staging (Not Prompt Injection)
 
 Skills are specified via:
 - CLI: `holon --skill github/solve`
 - Config: `skills: ["github/solve"]` in `holon.yaml`
 - Spec: `skills: ["github/solve"]` in `spec.yaml`
 
-The Runner loads skills from `.claude/skills/{skill}/SKILL.md`.
+**Important**: Holon does **not** inject skill content into the prompt. Instead, Holon **stages** skills to the workspace's `.claude/skills/` directory, and the agent (e.g., Claude Code) discovers them natively.
+
+```
+Holon Runtime:
+1. Resolve skills (builtin + user + remote)
+2. Stage to workspace/.claude/skills/
+3. Agent discovers skills at runtime
+
+Claude Code:
+- Auto-discovers .claude/skills/*/SKILL.md
+- Decides when/how to use each skill
+- Native skill mechanism, not prompt-based
+```
+
+This approach:
+- **Leverages agent capabilities**: Claude Code has native skill discovery
+- **Avoids duplication**: Skill content isn't repeated in prompt
+- **Enables rich skills**: Skills can include scripts, templates, not just text
 
 ### 4.3 Unified github/solve Skill
 
@@ -222,10 +239,21 @@ func (r *Resolver) Resolve(skillRef string) (Skill, error) {
 }
 ```
 
+After resolution, skills are **staged** to the workspace snapshot:
+
+```go
+// Stage copies resolved skills to workspace/.claude/skills/
+func Stage(workspaceDest string, skills []Skill) error {
+    destSkillsDir := filepath.Join(workspaceDest, ".claude/skills")
+    // Copy each skill directory to destSkillsDir
+}
+```
+
 This priority order enables:
 - **User override**: Workspace skills take precedence over builtin skills
 - **Customization**: Users can copy and modify builtin skills
 - **Defaults**: Builtin skills work out-of-the-box without configuration
+- **Agent-native discovery**: Agent finds skills in standard location
 
 ## 5. Artifact Design
 
