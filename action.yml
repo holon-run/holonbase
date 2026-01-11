@@ -1,5 +1,8 @@
 name: 'Holon Runner'
 description: 'Run Holon solve to resolve a GitHub Issue or PR'
+branding:
+  icon: 'cpu'
+  color: 'blue'
 inputs:
   ref:
     description: 'GitHub Issue or PR reference (URL, owner/repo#n, or #n with --repo)'
