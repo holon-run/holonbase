@@ -2,7 +2,9 @@
 
 English|[中文](README.zh.md)
 
-Holon runs AI coding agents headlessly to turn issues into PR-ready patches and summaries — locally or in CI, without babysitting the agent.
+Holon runs AI coding agents headlessly (Claude Code by default) to turn issues into PR-ready patches and summaries — locally or in CI, without babysitting the agent.
+
+Design direction: Holon is built around a sandboxed run + standardized artifacts contract, so higher-level automation (planning, ask-for-info, review/merge controllers) can be layered on over time—staged goals.
 
 ## Why Holon
 - Headless by default: run AI coding agents end-to-end without TTY or human input; deterministic, repeatable runs.
@@ -11,6 +13,9 @@ Holon runs AI coding agents headlessly to turn issues into PR-ready patches and 
 - Sandboxed execution: Docker + snapshot workspaces by default; nothing touches your repo unless you opt in.
 - Pluggable agents & toolchains: swap agent engines or bundles without changing your workflow.
 - Local or CI, same run: `holon solve` locally or in GitHub Actions with identical inputs and outputs.
+
+## Agents
+Holon currently ships with a Claude Code agent bundle by default. You can also run other agent bundles (including custom ones) via `--agent` / `HOLON_AGENT` and select update behavior via `--agent-channel` / `HOLON_AGENT_CHANNEL`.
 
 ## GitHub Actions quickstart (with holonbot)
 1) Install the GitHub App: [holonbot](https://github.com/apps/holonbot) in your repo/org.  

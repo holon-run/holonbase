@@ -2,7 +2,9 @@
 
 [English](README.md) | 中文
 
-Holon 让 AI 编码 Agent 以全程无交互方式运行，一步把 Issue 变成可合并的 PR 补丁和摘要——本地或 CI 都可用，无需人工值守。
+Holon 让 AI 编码 Agent 以全程无交互方式运行（默认使用 Claude Code），一步把 Issue 变成可合并的 PR 补丁和摘要——本地或 CI 都可用，无需人工值守。
+
+设计方向：Holon 围绕“沙箱运行 + 标准化工件契约”构建，未来可以在其上逐步叠加更高层自动化（计划、补充信息询问、评审/合并控制器等）——分阶段目标。
 
 ## 为什么选择 Holon
 - 默认无交互：无需 TTY/人肉输入，运行可重复、可预期。
@@ -11,6 +13,9 @@ Holon 让 AI 编码 Agent 以全程无交互方式运行，一步把 Issue 变�
 - 沙箱隔离：Docker + 快照工作区默认保护仓库，只有你主动选择才会写回宿主。
 - 可插拔 Agent 与工具链：自由更换 Agent 引擎/Bundle，不改工作流。
 - 本地/CI 同步体验：`holon solve` 本地或 GitHub Actions，输入输出一致。
+
+## Agents
+Holon 当前默认提供基于 Claude Code 的 Agent Bundle。你也可以通过 `--agent` / `HOLON_AGENT` 运行其他（包括自定义）Bundle，并通过 `--agent-channel` / `HOLON_AGENT_CHANNEL` 选择更新策略。
 
 ## GitHub Actions 快速开始（配合 holonbot）
 1) 安装 GitHub App：[holonbot](https://github.com/apps/holonbot)。  

@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Holon - Headless AI Agent Runtime for CI</title>
+    <title>Holon - Headless Claude Code Agent Runner for CI</title>
     <meta name="description"
-        content="Run AI coding agents headlessly to turn issues into PR-ready patches. Sandboxed execution, standardized artifacts, local or CI.">
+        content="Run AI coding agents headlessly (Claude Code by default) to turn issues into PR-ready patches and summaries. Sandboxed execution, standardized artifacts, local or CI.">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/png" href="assets/logo.png">
     <!-- Google Fonts -->
@@ -64,13 +64,13 @@
         <section class="hero-section">
             <div class="container hero-content">
                 <div class="hero-text">
-                    <a href="https://github.com/holon-run/holon/releases" id="version-badge" class="badge">v0.3 Public
-                        Preview</a>
+                    <a href="https://github.com/holon-run/holon/releases" id="version-badge" class="badge">Latest
+                        Release</a>
                     <h1>Run Agents.<br>Get Patches.<br>Ship PRs.</h1>
-                    <p class="subhead">Holon runs AI coding agents headlessly to turn issues into PR-ready patches and
-                        summaries — locally or in CI, without babysitting the agent.</p>
-                    <p class="description">Headless by default. Sandboxed execution. Standardized artifacts. Pluggable
-                        agents.</p>
+                    <p class="subhead">Holon runs AI coding agents headlessly (Claude Code by default) to turn issues
+                        into PR-ready patches and summaries — locally or in CI, without babysitting the agent.</p>
+                    <p class="description">Headless by default. Sandboxed execution. Standardized artifacts. Designed
+                        for automation.</p>
                     <div class="cta-group">
                         <a href="https://github.com/holon-run/holon" class="btn btn-primary">Get Started on GitHub</a>
                         <a href="#quickstart" class="btn btn-secondary">See Quickstart</a>
@@ -84,17 +84,17 @@
                             <span class="dot green"></span>
                         </div>
                         <div class="terminal-body">
-                            <div class="code-line"><span class="prompt">$</span> holon solve owner/repo#123</div>
-                            <div class="code-line dimmed">Initializing sandbox... done</div>
-                            <div class="code-line dimmed">Running agent (claude-3.5-sonnet)...</div>
-                            <div class="code-line info">Artifacts generated:</div>
-                            <div class="code-line indent">📄 diff.patch, summary.md</div>
-                            <div class="code-line dimmed">Applying patch and creating PR...</div>
-                            <div class="code-line success">✔ PR created successfully!</div>
-                            <div class="code-line info">🔗 https://github.com/owner/repo/pull/124</div>
-                            <div class="code-line"><span class="prompt">$</span> _</div>
-                        </div>
-                    </div>
+	                            <div class="code-line"><span class="prompt">$</span> holon solve owner/repo#123</div>
+	                            <div class="code-line dimmed">Initializing sandbox... done</div>
+	                            <div class="code-line dimmed">Running agent (Claude Code)...</div>
+	                            <div class="code-line info">Artifacts generated:</div>
+	                            <div class="code-line indent">📄 diff.patch, summary.md, manifest.json</div>
+	                            <div class="code-line dimmed">Creating/updating PR...</div>
+	                            <div class="code-line success">✔ PR published successfully!</div>
+	                            <div class="code-line info">🔗 https://github.com/owner/repo/pull/124</div>
+	                            <div class="code-line"><span class="prompt">$</span> _</div>
+	                        </div>
+	                    </div>
                 </div>
             </div>
         </section>
@@ -134,15 +134,20 @@ jobs:
   holon:
     name: Run Holon (via holon-solve)
     uses: holon-run/holon/.github/workflows/holon-solve.yml@main
-    with:
-      issue_number: ${{ github.event.issue.number || github.event.pull_request.number }}
-      comment_id: ${{ github.event.comment.id }}
-    secrets: inherit</code></pre>
+	    with:
+	      issue_number: ${{ github.event.issue.number || github.event.pull_request.number }}
+	      comment_id: ${{ github.event.comment.id || 0 }}
+	    secrets:
+	      anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }} # required
+	      anthropic_base_url: ${{ secrets.ANTHROPIC_BASE_URL }}</code></pre>
                     </div>
                     <div class="quickstart-note">
                         <strong>Setup:</strong> Install the <a href="https://github.com/apps/holonbot"
                             style="color: var(--accent-light);">holonbot GitHub App</a> and set the
-                        <code>ANTHROPIC_AUTH_TOKEN</code> secret in your repository.
+                        <code>ANTHROPIC_AUTH_TOKEN</code> secret in your repository. For a ready-to-copy workflow, see
+                        <a href="https://github.com/holon-run/holon/blob/main/examples/workflows/holon-trigger.yml"
+                            style="color: var(--accent-light);">examples/workflows/holon-trigger.yml</a>. Trigger by
+                        commenting <code>@holonbot</code> (or labeling <code>holon</code>).
                     </div>
                 </div>
                 <div class="tab-content" id="local-cli" role="tabpanel">
@@ -204,7 +209,8 @@ holon solve https://github.com/owner/repo/issues/123
                     <div class="feature-card">
                         <div class="icon-box">🔌</div>
                         <h3>Pluggable Agents</h3>
-                        <p>Swap agent engines or bundles without changing your workflow. No model or vendor lock-in.</p>
+                        <p>Claude Code by default, with pluggable agent bundles when you need to swap engines or
+                            toolchains.</p>
                     </div>
                     <div class="feature-card">
                         <div class="icon-box">⚙️</div>
