@@ -1,0 +1,177 @@
+# Development Notes
+
+This document is a contributor-oriented reference for developing Holon itself (the CLI, runtime, and bundled agents). It complements:
+- `AGENTS.md` (source of truth for repo guidelines)
+- `CONTRIBUTING.md` (contribution process)
+- `docs/` and `rfc/` (design notes and contracts)
+
+## Architecture at a glance
+- Runner (Go): prepares inputs/workspace, runs the container, validates artifacts, and publishes results.
+- Agent (in container): bridges the Holon contract to a specific engine/runtime (Claude Code by default).
+
+See:
+- `docs/holon-architecture.md` (overview)
+- `rfc/0002-agent-scheme.md` (agent contract)
+- `docs/agent-encapsulation.md` (image composition notes)
+
+## Build and test
+Use the commands in `AGENTS.md` (kept up to date).
+
+## Logging
+Holon uses structured, leveled logs.
+
+Log levels:
+- `debug`: most verbose
+- `info`: general info
+- `progress`: progress/status updates (default)
+- `minimal`: warnings/errors only
+
+Set log level:
+- CLI: `--log-level debug|info|progress|minimal`
+- Project config: `.holon/config.yaml` (`log_level: "debug"`)
+
+## Common debugging entrypoints
+- `holon solve …`: end-to-end GitHub flow (collect context → run agent → publish).
+- `holon run …`: lower-level execution entrypoint (spec/goal driven).
+- `holon detect image`: explain and debug base image auto-detection.
+
+## Project configuration (`.holon/config.yaml`)
+Holon loads project configuration from `.holon/config.yaml` by searching upward from the current directory.
+
+Typical fields:
+```yaml
+base_image: auto            # or an explicit image like golang:1.24
+agent: default              # agent bundle ref (path/URL/alias)
+agent_channel: latest       # latest (default), builtin, pinned:<version>
+log_level: progress         # debug, info, progress, minimal
+assistant_output: none      # none, stream
+skills: [./skills/foo]      # optional skill dirs
+git:
+  author_name: holonbot[bot]
+  author_email: 250454749+holonbot[bot]@users.noreply.github.com
+```
+
+Precedence is generally: CLI flags > project config > defaults.
+
+## Base image auto-detection
+Holon can auto-detect a toolchain base image from workspace files when `--image` is not provided (and auto-detection is enabled).
+
+- CLI flags:
+  - `--image` / `-i`: explicit base image (disables auto-detect for this run)
+  - `--image-auto-detect`: enable/disable detection
+- Debugging:
+  - `holon detect image --debug`
+  - `holon detect image --json`
+
+Implementation lives under `pkg/image/`.
+
+## Agent config mounting (`--agent-config-mode`)
+Holon can optionally mount host agent configuration into the container (currently relevant for Claude agents).
+
+`--agent-config-mode` values:
+- `no` (default): never mount (safest; recommended for CI)
+- `auto`: mount `~/.claude` if present and compatible
+- `yes`: always attempt to mount; warns if missing/incompatible
+
+Security note: mounting host config may expose local credentials/sessions to the container. Avoid enabling this in CI or shared environments.
+
+## Preflight checks
+Holon runs preflight checks to fail fast when required tooling or credentials are missing.
+
+- `holon run`: checks Docker, git, workspace/output paths by default
+- `holon solve`: includes GitHub-token checks (and may run early checks before workspace prep)
+- Bypass (not recommended): `--no-preflight` / `--skip-checks`
+
+Implementation lives under `pkg/preflight/`.
+
+## Agent bundle management
+Use `holon agent …` to inspect and manage agent bundles/aliases:
+- `holon agent install <url> --name <alias>`
+- `holon agent list`
+- `holon agent remove <alias>`
+- `holon agent info default`
+
+Builtin agent resolution notes:
+- If no explicit agent is provided, Holon can resolve an agent via `--agent-channel` / `HOLON_AGENT_CHANNEL` (default: `latest`).
+- Auto-install can be disabled with `HOLON_NO_AUTO_INSTALL=1` (useful in strict/offline environments).
+
+## Environment variables (high level)
+Most end-to-end developer runs need:
+- `ANTHROPIC_AUTH_TOKEN` (or equivalent provider token)
+- `GITHUB_TOKEN` (or `HOLON_GITHUB_TOKEN`, or `gh auth login`)
+
+Other commonly used variables:
+- `HOLON_CACHE_DIR`: overrides the cache directory (default is under `~/.holon/`)
+- `HOLON_AGENT`: default agent bundle reference (when not using a channel)
+- `HOLON_AGENT_CHANNEL`: agent channel (e.g. `latest`, `builtin`, `pinned:<version>`)
+
+Agent-specific runtime variables (model, timeouts, etc.) are documented in:
+- `docs/agent-claude.md`
+
+## Artifacts and contracts
+Holon treats an agent run like a batch job with explicit, reviewable outputs. The common artifacts are:
+- `diff.patch`
+- `summary.md`
+- `manifest.json`
+
+See:
+- `docs/manifest-format.md`
+- `docs/workspace-manifest-format.md`
+
+## Publishing and publishers
+Publishing applies Holon’s artifacts to external systems (e.g. pushing commits, creating/updating PRs, posting PR comments).
+
+- `holon solve` runs end-to-end and includes publishing as part of the flow.
+- `holon publish` publishes an existing `holon-output/` directory using a chosen provider and writes `publish-result.json`.
+
+Built-in publishers live in `pkg/publisher/`:
+- `github-pr`: create/update a PR from `diff.patch` + `summary.md` (target: `owner/repo[:base_branch]`)
+- `github`: post PR comments/replies (target: `owner/repo#123` or `owner/repo/pr/123`)
+- `git`: apply `diff.patch` to a local git repo and optionally commit/push (target: e.g. `origin/main`)
+
+Registration:
+- Publishers are registered via `init()` and enabled for the CLI through blank imports in `cmd/holon/main.go`.
+
+Discover and use publishers:
+```bash
+holon publish list
+holon publish --provider github-pr --target owner/repo:main --output ./holon-output
+holon publish --provider github --target owner/repo#123 --output ./holon-output
+```
+
+## GitHub helper library (for collectors/publishers)
+Holon centralizes GitHub API behavior in `pkg/github/` so collectors and publishers share:
+- auth/token handling
+- pagination and rate-limit behavior
+- typed API helpers (issues, PRs, comments, review threads, diffs, CI)
+
+See: `pkg/github/client.go`, `pkg/github/operations.go`, `pkg/github/types.go`.
+
+## Prompt compiler (assets → system/user prompts)
+Holon compiles prompts from composable markdown assets under `pkg/prompt/assets/`:
+- Common contract: `pkg/prompt/assets/contracts/common.md`
+- Mode overlays: `pkg/prompt/assets/modes/<mode>/contract.md` and `.../context.md`
+- Roles: `pkg/prompt/assets/roles/<role>.md` (and optional mode-specific `modes/<mode>/overlays/<role>.md`)
+
+Layer order (bottom → top):
+1) common contract
+2) role
+3) mode contract (optional)
+4) mode overlay (optional, `modes/<mode>/overlay.md`)
+5) mode context (optional)
+6) role overlay (optional)
+
+Defaults are defined in `pkg/prompt/assets/manifest.yaml` (mode + role).
+
+Code:
+- compiler: `pkg/prompt/compiler.go`
+- embedded assets: `pkg/prompt/assets.go`
+
+When changing prompts, prefer editing the assets under `pkg/prompt/assets/` and validate with existing compiler tests (`pkg/prompt/compiler_test.go`).
+
+## Mock Claude driver (deterministic testing)
+The Claude agent supports a mock driver so tests can run without real API credentials:
+- enable: `HOLON_CLAUDE_DRIVER=mock`
+- fixture: `HOLON_CLAUDE_MOCK_FIXTURE=/path/to/fixture.json`
+
+Implementation lives under `agents/claude/src/mockDriver.ts` and `agents/claude/src/claudeSdk.ts`.

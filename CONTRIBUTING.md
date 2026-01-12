@@ -72,4 +72,4 @@ go test ./pkg/... -json -v 2>&1 | gotestfmt
 
 ## Reference Docs
 
-- `AGENTS.md` and `CLAUDE.md` provide repository-specific guidance for agents and tooling.
+- `AGENTS.md` is the source of truth for repository-specific guidance; `CLAUDE.md` exists as a pointer for Claude Code and other agent tooling. For deeper contributor references, see `docs/development.md`.

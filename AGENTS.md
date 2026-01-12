@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+`AGENTS.md` is the source of truth for repository-specific guidance for agent tooling. `CLAUDE.md` is intentionally minimal and points here.
+
+For deeper contributor references (debugging, contracts, detection), see `docs/development.md`.
+
 ## Project Structure & Module Organization
 
 - `cmd/holon/`: Go CLI entrypoint (`holon`).

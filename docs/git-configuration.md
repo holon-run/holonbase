@@ -189,6 +189,5 @@ Holon configures both to be the same value, ensuring consistent attribution.
 
 ## Related Documentation
 
-- [Project Configuration](../CLAUDE.md#project-configuration-file) - Details on `.holon/config.yaml`
-- [Publisher System](../CLAUDE.md#publisher-system) - How git identity is used during publishing
-- [Environment Variables](../CLAUDE.md#required-environment-variables) - All supported environment variables
+- `.holon/config.yaml` examples: see this document and `docs/skills.md`
+- Repo conventions and contributor workflow: `AGENTS.md` and `CONTRIBUTING.md`
