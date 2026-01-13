@@ -18,25 +18,16 @@ permissions:
   pull-requests: write
   id-token: write
 
-concurrency:
-  group: holon-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.actor }}
-  cancel-in-progress: true
-
 jobs:
   holon:
     name: Run Holon (via holon-solve)
-    # Light job-level gating for comment events (cheap heuristic to avoid unnecessary workflow runs)
-    # The precise gate with full parsing is inside holon-solve.yml
-    if: |
-      (github.event_name != 'issue_comment' && github.event_name != 'pull_request_review_comment' && github.event_name != 'pull_request_review') ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@holonbot')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@holonbot')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@holonbot'))
     uses: holon-run/holon/.github/workflows/holon-solve.yml@main
     with:
       issue_number: ${{ github.event.issue.number || github.event.pull_request.number }}
+      label_name: ${{ github.event.label.name || '' }}
+      assignee_login: ${{ github.event.assignee.login || '' }}
       comment_id: ${{ github.event.comment.id || 0 }}
-      review_body: ${{ github.event.review.body || '' }}
+      review_id: ${{ github.event.review.id || 0 }}
       # Optional: Specify custom runner labels.
       # Plain string for single label (e.g., 'self-hosted' or 'ubuntu-24.04-large'):
       # runs_on: 'self-hosted'
