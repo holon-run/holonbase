@@ -1,0 +1,19 @@
+{
+    "op": "add",
+    "agent": "agent/knowledge-extractor",
+    "target": "claim-001",
+    "payload": {
+        "object": {
+            "type": "claim",
+            "content": {
+                "statement": "Quantum entanglement enables faster-than-light communication",
+                "confidence": 0.3,
+                "sourceId": "evidence-001"
+            }
+        }
+    },
+    "evidence": [
+        "evidence-001"
+    ],
+    "note": "Common misconception - needs verification"
+}

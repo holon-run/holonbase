@@ -1,0 +1,20 @@
+{
+    "op": "add",
+    "agent": "user/alice",
+    "target": "concept-001",
+    "payload": {
+        "object": {
+            "type": "concept",
+            "content": {
+                "name": "Quantum Entanglement",
+                "definition": "A quantum phenomenon where two or more particles remain connected",
+                "aliases": [
+                    "quantum correlation",
+                    "EPR paradox"
+                ]
+            }
+        }
+    },
+    "confidence": 0.9,
+    "note": "Extracted from physics textbook"
+}

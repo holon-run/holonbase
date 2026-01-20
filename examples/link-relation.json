@@ -1,0 +1,16 @@
+{
+    "op": "link",
+    "agent": "user/alice",
+    "target": "relation-001",
+    "payload": {
+        "relation": {
+            "sourceId": "concept-001",
+            "targetId": "concept-quantum-physics",
+            "relationType": "is_a",
+            "attributes": {
+                "strength": 1.0
+            }
+        }
+    },
+    "note": "Link quantum entanglement to quantum physics"
+}
