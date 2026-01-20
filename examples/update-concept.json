@@ -1,0 +1,11 @@
+{
+    "op": "update",
+    "agent": "user/alice",
+    "target": "concept-001",
+    "payload": {
+        "changes": {
+            "definition": "A quantum phenomenon where particles remain connected regardless of distance"
+        }
+    },
+    "note": "Updated definition for clarity"
+}

@@ -7,6 +7,7 @@ import { logPatches } from './cli/log.js';
 import { showObject } from './cli/show.js';
 import { getObject, listObjects } from './cli/get.js';
 import { exportRepository } from './cli/export.js';
+import { diffStates } from './cli/diff.js';
 
 const program = new Command();
 
@@ -97,6 +98,21 @@ program
     .action((options) => {
         try {
             listObjects(options);
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// diff command
+program
+    .command('diff')
+    .description('Compare two states')
+    .requiredOption('--from <patch_id>', 'From patch ID (or HEAD)')
+    .requiredOption('--to <patch_id>', 'To patch ID (or HEAD)')
+    .action((options) => {
+        try {
+            diffStates(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
