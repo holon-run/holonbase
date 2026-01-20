@@ -8,6 +8,8 @@ import { showObject } from './cli/show.js';
 import { listObjects } from './cli/list.js';
 import { exportRepository } from './cli/export.js';
 import { diffStates } from './cli/diff.js';
+import { showStatus } from './cli/status.js';
+import { manageView } from './cli/view.js';
 
 const program = new Command();
 
@@ -35,13 +37,17 @@ program
     .command('commit')
     .description('Commit a patch')
     .argument('[file]', 'Patch JSON file (or use stdin with -)')
-    .action((file?: string) => {
+    .option('--dry-run', 'Preview the commit without actually committing')
+    .option('--confirm', 'Ask for confirmation before committing')
+    .action(async (file?: string, cmdOptions?: any) => {
         try {
             const options = {
                 file: file && file !== '-' ? file : undefined,
                 stdin: !file || file === '-',
+                dryRun: cmdOptions?.dryRun || false,
+                confirm: cmdOptions?.confirm || false,
             };
-            commitPatch(options);
+            await commitPatch(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -102,6 +108,72 @@ program
     .action((options) => {
         try {
             diffStates(options);
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// status command
+program
+    .command('status')
+    .description('Show repository status')
+    .action(() => {
+        try {
+            showStatus();
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// view command
+const viewCmd = program
+    .command('view')
+    .description('Manage workspace views');
+
+viewCmd
+    .command('list')
+    .description('List all views')
+    .action(() => {
+        try {
+            manageView({ action: 'list' });
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+viewCmd
+    .command('create <name>')
+    .description('Create a new view')
+    .action((name: string) => {
+        try {
+            manageView({ action: 'create', name });
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+viewCmd
+    .command('switch <name>')
+    .description('Switch to a view')
+    .action((name: string) => {
+        try {
+            manageView({ action: 'switch', name });
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+viewCmd
+    .command('delete <name>')
+    .description('Delete a view')
+    .action((name: string) => {
+        try {
+            manageView({ action: 'delete', name });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

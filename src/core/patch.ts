@@ -8,9 +8,12 @@ export class PatchManager {
     /**
      * Create and commit a patch
      */
-    commit(input: PatchInput): HolonObject {
+    commit(input: PatchInput, currentView: string = 'main'): HolonObject {
         const now = new Date().toISOString();
-        const head = this.db.getConfig('head') || '';
+
+        // Get HEAD from current view
+        const view = this.db.getView(currentView);
+        const head = view?.headPatchId || '';
 
         // Build patch content
         const content: PatchContent = {
@@ -38,7 +41,10 @@ export class PatchManager {
         // Store patch
         this.db.insertObject(id, 'patch', content, now);
 
-        // Update HEAD
+        // Update view's HEAD
+        this.db.updateView(currentView, id);
+
+        // Also update global HEAD for backward compatibility
         this.db.setConfig('head', id);
 
         // Apply patch to state view

@@ -63,8 +63,20 @@ export class HolonDatabase {
         value TEXT NOT NULL
       );
 
+      -- Views (workspace branches)
+      CREATE TABLE IF NOT EXISTS views (
+        name TEXT PRIMARY KEY,
+        head_patch_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       -- Initialize HEAD if not exists
       INSERT OR IGNORE INTO config (key, value) VALUES ('head', '');
+      
+      -- Initialize main view if not exists
+      INSERT OR IGNORE INTO views (name, head_patch_id, created_at, updated_at)
+      VALUES ('main', '', datetime('now'), datetime('now'));
     `);
     }
 
@@ -214,6 +226,65 @@ export class HolonDatabase {
             content: JSON.parse(row.content),
             updatedAt: row.updated_at,
         }));
+    }
+
+    /**
+     * Create a new view
+     */
+    createView(name: string, headPatchId: string): void {
+        const now = new Date().toISOString();
+        const stmt = this.db.prepare(
+            'INSERT INTO views (name, head_patch_id, created_at, updated_at) VALUES (?, ?, ?, ?)'
+        );
+        stmt.run(name, headPatchId, now, now);
+    }
+
+    /**
+     * Get a view by name
+     */
+    getView(name: string): any | null {
+        const stmt = this.db.prepare('SELECT * FROM views WHERE name = ?');
+        const row = stmt.get(name) as any;
+        if (!row) return null;
+        return {
+            name: row.name,
+            headPatchId: row.head_patch_id,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        };
+    }
+
+    /**
+     * Get all views
+     */
+    getAllViews(): any[] {
+        const stmt = this.db.prepare('SELECT * FROM views ORDER BY name');
+        const rows = stmt.all() as any[];
+        return rows.map(row => ({
+            name: row.name,
+            headPatchId: row.head_patch_id,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        }));
+    }
+
+    /**
+     * Update view's HEAD
+     */
+    updateView(name: string, headPatchId: string): void {
+        const now = new Date().toISOString();
+        const stmt = this.db.prepare(
+            'UPDATE views SET head_patch_id = ?, updated_at = ? WHERE name = ?'
+        );
+        stmt.run(headPatchId, now, name);
+    }
+
+    /**
+     * Delete a view
+     */
+    deleteView(name: string): void {
+        const stmt = this.db.prepare('DELETE FROM views WHERE name = ?');
+        stmt.run(name);
     }
 
     /**

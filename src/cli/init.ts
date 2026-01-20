@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
+import { ConfigManager } from '../utils/config.js';
 
 export interface InitOptions {
     path: string;
@@ -21,16 +22,10 @@ export function initRepository(options: InitOptions): void {
     mkdirSync(join(holonDir, 'files'), { recursive: true });
     mkdirSync(join(holonDir, 'exports'), { recursive: true });
 
-    // Create config.json
-    const config = {
-        version: '0.1.0-alpha',
-        language: 'en',
-        createdAt: new Date().toISOString(),
-    };
-    writeFileSync(
-        join(holonDir, 'config.json'),
-        JSON.stringify(config, null, 2)
-    );
+    // Initialize config using ConfigManager
+    const configPath = join(holonDir, 'config.json');
+    const config = new ConfigManager(configPath);
+    config.save();
 
     // Initialize database
     const dbPath = join(holonDir, 'holonbase.db');
