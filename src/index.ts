@@ -5,7 +5,7 @@ import { initRepository } from './cli/init.js';
 import { commitPatch } from './cli/commit.js';
 import { logPatches } from './cli/log.js';
 import { showObject } from './cli/show.js';
-import { getObject, listObjects } from './cli/get.js';
+import { listObjects } from './cli/list.js';
 import { exportRepository } from './cli/export.js';
 import { diffStates } from './cli/diff.js';
 
@@ -77,19 +77,7 @@ program
         }
     });
 
-// get command
-program
-    .command('get')
-    .description('Get object from current state')
-    .argument('<id>', 'Object ID')
-    .action((id: string) => {
-        try {
-            getObject(id);
-        } catch (error) {
-            console.error('Error:', (error as Error).message);
-            process.exit(1);
-        }
-    });
+
 
 // list command
 program

@@ -2,32 +2,11 @@ import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { findHolonbaseRoot } from '../utils/repo.js';
 
-export interface GetOptions {
+export interface ListOptions {
     type?: string;
 }
 
-export function getObject(id: string): void {
-    const repoRoot = findHolonbaseRoot(process.cwd());
-    if (!repoRoot) {
-        throw new Error('Not a holonbase repository');
-    }
-
-    const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
-    const db = new HolonDatabase(dbPath);
-
-    const obj = db.getStateViewObject(id);
-    if (!obj) {
-        console.error(`Object ${id} not found in current state`);
-        db.close();
-        process.exit(1);
-    }
-
-    console.log(JSON.stringify(obj, null, 2));
-
-    db.close();
-}
-
-export function listObjects(options: GetOptions): void {
+export function listObjects(options: ListOptions): void {
     const repoRoot = findHolonbaseRoot(process.cwd());
     if (!repoRoot) {
         throw new Error('Not a holonbase repository');
