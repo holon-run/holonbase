@@ -10,6 +10,7 @@ import { exportRepository } from './cli/export.js';
 import { diffStates } from './cli/diff.js';
 import { showStatus } from './cli/status.js';
 import { manageView } from './cli/view.js';
+import { revertPatch } from './cli/revert.js';
 
 const program = new Command();
 
@@ -174,6 +175,19 @@ viewCmd
     .action((name: string) => {
         try {
             manageView({ action: 'delete', name });
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// revert command
+program
+    .command('revert')
+    .description('Revert the last patch by creating a reverse patch')
+    .action(() => {
+        try {
+            revertPatch();
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

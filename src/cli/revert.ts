@@ -1,0 +1,123 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { HolonDatabase } from '../storage/database.js';
+import { ConfigManager } from '../utils/config.js';
+import { PatchManager } from '../core/patch.js';
+import { PatchContent } from '../types/index.js';
+
+export function revertPatch(): void {
+    const holonDir = join(process.cwd(), '.holonbase');
+
+    if (!existsSync(holonDir)) {
+        console.error('Not a holonbase repository');
+        process.exit(1);
+    }
+
+    const dbPath = join(holonDir, 'holonbase.db');
+    const configPath = join(holonDir, 'config.json');
+
+    const db = new HolonDatabase(dbPath);
+    const config = new ConfigManager(configPath);
+    const patchManager = new PatchManager(db);
+
+    // Get current view
+    const currentView = config.getCurrentView();
+    const view = db.getView(currentView);
+
+    if (!view || !view.headPatchId) {
+        console.error('Nothing to revert');
+        db.close();
+        process.exit(1);
+    }
+
+    // Get HEAD patch
+    const headPatch = db.getObject(view.headPatchId);
+    if (!headPatch) {
+        console.error('HEAD patch not found');
+        db.close();
+        process.exit(1);
+    }
+
+    const content = headPatch.content as PatchContent;
+
+    // Create reverse patch
+    const reversePatchInput = createReversePatch(content, headPatch.id);
+
+    if (!reversePatchInput) {
+        console.error(`Cannot revert operation: ${content.op}`);
+        console.error('This operation type is not yet supported for revert');
+        db.close();
+        process.exit(1);
+    }
+
+    // Commit the reverse patch
+    const reversePatch = patchManager.commit(reversePatchInput, currentView);
+
+    console.log(`Reverted patch ${headPatch.id.substring(0, 8)}`);
+    console.log(`Created reverse patch ${reversePatch.id.substring(0, 8)}`);
+    console.log(`  Operation: ${reversePatch.content.op}`);
+    console.log(`  Target: ${reversePatch.content.target}`);
+
+    db.close();
+}
+
+function createReversePatch(content: PatchContent, originalPatchId: string): any | null {
+    const agent = content.agent + '/revert';
+
+    switch (content.op) {
+        case 'add':
+            // Reverse of add is delete
+            return {
+                op: 'delete',
+                agent,
+                target: content.target,
+                note: `Revert add operation from ${originalPatchId.substring(0, 8)}`,
+            };
+
+        case 'delete':
+            // Reverse of delete is add (if we have the original object)
+            if (content.payload?.originalObject) {
+                return {
+                    op: 'add',
+                    agent,
+                    target: content.target,
+                    payload: {
+                        object: content.payload.originalObject,
+                    },
+                    note: `Revert delete operation from ${originalPatchId.substring(0, 8)}`,
+                };
+            }
+            return null;
+
+        case 'update':
+            // Reverse of update is update with old values
+            if (content.payload?.oldValues) {
+                return {
+                    op: 'update',
+                    agent,
+                    target: content.target,
+                    payload: {
+                        changes: content.payload.oldValues,
+                    },
+                    note: `Revert update operation from ${originalPatchId.substring(0, 8)}`,
+                };
+            }
+            return null;
+
+        case 'link':
+            // Reverse of link is delete the relation
+            return {
+                op: 'delete',
+                agent,
+                target: content.target,
+                note: `Revert link operation from ${originalPatchId.substring(0, 8)}`,
+            };
+
+        case 'merge':
+            // Merge revert is complex, not supported yet
+            return null;
+
+        default:
+            return null;
+    }
+}
