@@ -70,15 +70,73 @@ holonbase export --format jsonl
 
 ## CLI Commands
 
+### Core Commands
+
 | Command | Description |
 |---------|-------------|
 | `holonbase init [path]` | Initialize a new repository |
+| `holonbase status` | Show repository status and current view |
 | `holonbase commit <file>` | Commit a patch (use `-` for stdin) |
 | `holonbase log [-n N]` | Show patch history |
 | `holonbase show <id>` | Show object details |
-| `holonbase get <id>` | Get object from current state |
 | `holonbase list [-t type]` | List objects in current state |
 | `holonbase export [-f format]` | Export repository data |
+
+### Workspace Commands
+
+| Command | Description |
+|---------|-------------|
+| `holonbase view list` | List all views (branches) |
+| `holonbase view create <name>` | Create a new view from current HEAD |
+| `holonbase view switch <name>` | Switch to a different view |
+| `holonbase view delete <name>` | Delete a view |
+
+### Commit Options
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Preview the commit without actually committing |
+| `--confirm` | Ask for confirmation before committing |
+
+## Workspace Features
+
+Holonbase supports Git-like workspaces (views) for managing parallel knowledge states:
+
+```bash
+# Check current status
+holonbase status
+
+# Create an experimental view
+holonbase view create experiment
+
+# Switch to experiment view
+holonbase view switch experiment
+
+# Work in isolation
+holonbase commit my-patch.json
+
+# List all views
+holonbase view list
+```
+
+## Commit Enhancements
+
+### Preview Mode
+
+Preview what will be committed without actually committing:
+
+```bash
+holonbase commit patch.json --dry-run
+```
+
+### Interactive Confirmation
+
+Require confirmation before committing (useful for AI-generated content):
+
+```bash
+holonbase commit patch.json --confirm
+```
+
 
 ## Patch Operations
 
