@@ -52,10 +52,11 @@ program
 program
     .command('log')
     .description('Show patch history')
+    .argument('[object_id]', 'Object ID to show history for')
     .option('-n, --limit <number>', 'Limit number of patches', parseInt)
-    .action((options) => {
+    .action((objectId, options) => {
         try {
-            logPatches(options);
+            logPatches({ ...options, objectId });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

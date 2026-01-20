@@ -13,12 +13,10 @@ export function showObject(id: string): void {
 
     // First try to find in objects table (for patches and raw objects)
     let obj = db.getObject(id);
-    let isFromObjects = true;
 
     // If not found, try state_view table (for current state objects)
     if (!obj) {
         obj = db.getStateViewObject(id);
-        isFromObjects = false;
     }
 
     if (!obj) {
@@ -27,19 +25,8 @@ export function showObject(id: string): void {
         process.exit(1);
     }
 
-    // Display the object
+    // Always output pure JSON
     console.log(JSON.stringify(obj, null, 2));
-
-    // If it's a state object, show related patches
-    if (!isFromObjects && obj.type !== 'patch') {
-        const patches = db.getPatchesByTarget(id);
-        if (patches.length > 0) {
-            console.log(`\n--- History (${patches.length} patches) ---`);
-            for (const patch of patches) {
-                console.log(`${patch.id.substring(0, 16)} | ${patch.content.op.padEnd(6)} | ${patch.content.agent} | ${patch.createdAt}`);
-            }
-        }
-    }
 
     db.close();
 }

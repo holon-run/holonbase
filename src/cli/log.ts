@@ -4,6 +4,7 @@ import { findHolonbaseRoot } from '../utils/repo.js';
 
 export interface LogOptions {
     limit?: number;
+    objectId?: string;
 }
 
 export function logPatches(options: LogOptions): void {
@@ -15,12 +16,24 @@ export function logPatches(options: LogOptions): void {
     const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
     const db = new HolonDatabase(dbPath);
 
-    const patches = db.getAllPatches(options.limit);
+    // If objectId is provided, show patches for that object
+    const patches = options.objectId
+        ? db.getPatchesByTarget(options.objectId)
+        : db.getAllPatches(options.limit);
 
     if (patches.length === 0) {
-        console.log('No patches yet');
+        if (options.objectId) {
+            console.log(`No patches found for object: ${options.objectId}`);
+        } else {
+            console.log('No patches yet');
+        }
         db.close();
         return;
+    }
+
+    // Show header if filtering by object
+    if (options.objectId) {
+        console.log(`Patch history for object: ${options.objectId}\n`);
     }
 
     for (const patch of patches) {
