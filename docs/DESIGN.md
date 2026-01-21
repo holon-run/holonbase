@@ -93,6 +93,9 @@ Holonbase 采用四层架构设计：
 
 ## 对象模型
 
+> 重要：Holonbase 需要同时支持**稳定引用（object_id / ref）**与**内容可校验（content_hash / cid）**。
+> 两者不是同一个概念：更新内容不应导致引用断裂。统一规则见 `docs/ID_MODEL.md`。
+
 ### 统一对象（HolonObject）
 
 所有知识单元均为 `HolonObject`，结构如下：

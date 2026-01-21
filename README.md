@@ -124,6 +124,7 @@ npm test
 
 - [CLI Reference](README_CLI.md)
 - [Design Document](docs/DESIGN.md)
+- [ID Model Spec](docs/ID_MODEL.md)
 - [Multi-Source Architecture](docs/MULTI_SOURCE_DESIGN.md)
 
 ## 📄 License

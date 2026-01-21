@@ -153,14 +153,9 @@ holonbase view create experiment-1
 holonbase view switch experiment-1
 ```
 
-## Import Tools
+## Ingest (Sources)
 
-You can import single documents using the `import` command (useful for one-off additions).
+Holonbase ingests content through configured sources.
 
-```bash
-holonbase import my-note.md
-```
-
-Options:
-- `--type`: Force object type (note, file, etc).
-- `--agent`: Specify the agent ID.
+- Add sources via `holonbase source add ...`
+- Ingest changes via `holonbase sync`
