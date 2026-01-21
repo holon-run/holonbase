@@ -77,7 +77,7 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
         );
 
         // Update path index
-        db.upsertPathIndex(file.path, file.contentId, file.type, file.size, file.mtime);
+        db.upsertPathIndex(file.path, 'local', file.contentId, file.type, file.size, file.mtime);
         patchCount++;
     }
 
@@ -108,6 +108,7 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
         // Update path index
         db.upsertPathIndex(
             modified.file.path,
+            'local',
             modified.file.contentId,
             modified.file.type,
             modified.file.size,
@@ -130,7 +131,7 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
         );
 
         // Remove from path index
-        db.deletePathIndex(deleted.path);
+        db.deletePathIndex(deleted.path, 'local');
         patchCount++;
     }
 
@@ -140,7 +141,7 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
         // TODO: Add proper rename patch support
 
         // Delete old path
-        db.deletePathIndex(renamed.oldPath);
+        db.deletePathIndex(renamed.oldPath, 'local');
 
         // Add new path
         const file = workspaceFiles.find(f => f.path === renamed.newPath);
@@ -166,7 +167,7 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
                 currentView
             );
 
-            db.upsertPathIndex(file.path, file.contentId, file.type, file.size, file.mtime);
+            db.upsertPathIndex(file.path, 'local', file.contentId, file.type, file.size, file.mtime);
             patchCount++;
         }
     }

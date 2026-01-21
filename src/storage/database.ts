@@ -22,16 +22,30 @@ export class HolonDatabase {
      */
     initialize(): void {
         this.db.exec(`
+      -- Data sources
+      CREATE TABLE IF NOT EXISTS sources (
+        name TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        config JSON NOT NULL,
+        last_sync TEXT,
+        created_at TEXT NOT NULL
+      );
+
       -- Unified object storage
       CREATE TABLE IF NOT EXISTS objects (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         content JSON NOT NULL,
+        source TEXT,
+        hash TEXT,
         created_at TEXT NOT NULL,
+        updated_at TEXT,
         embedding BLOB
       );
 
       CREATE INDEX IF NOT EXISTS idx_objects_type ON objects(type);
+      CREATE INDEX IF NOT EXISTS idx_objects_source ON objects(source);
+      CREATE INDEX IF NOT EXISTS idx_objects_hash ON objects(hash);
 
       -- Patch-specific indexes
       CREATE INDEX IF NOT EXISTS idx_patch_parent ON objects(
@@ -71,17 +85,20 @@ export class HolonDatabase {
         updated_at TEXT NOT NULL
       );
 
-      -- Path index for workspace tracking (Git-style)
+      -- Path index for multi-source tracking
       CREATE TABLE IF NOT EXISTS path_index (
-        path TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        source TEXT NOT NULL,
         content_id TEXT NOT NULL,
         object_type TEXT NOT NULL,
         size INTEGER,
         mtime TEXT,
-        tracked_at TEXT NOT NULL
+        tracked_at TEXT NOT NULL,
+        PRIMARY KEY (path, source)
       );
 
       CREATE INDEX IF NOT EXISTS idx_path_index_content ON path_index(content_id);
+      CREATE INDEX IF NOT EXISTS idx_path_index_source ON path_index(source);
 
       -- Initialize HEAD if not exists
       INSERT OR IGNORE INTO config (key, value) VALUES ('head', '');
@@ -95,11 +112,19 @@ export class HolonDatabase {
     /**
      * Insert an object
      */
-    insertObject(id: string, type: string, content: any, createdAt: string): void {
+    insertObject(
+        id: string,
+        type: string,
+        content: any,
+        createdAt: string,
+        source?: string,
+        hash?: string
+    ): void {
+        const now = new Date().toISOString();
         const stmt = this.db.prepare(
-            'INSERT INTO objects (id, type, content, created_at) VALUES (?, ?, ?, ?)'
+            'INSERT INTO objects (id, type, content, source, hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
-        stmt.run(id, type, JSON.stringify(content), createdAt);
+        stmt.run(id, type, JSON.stringify(content), source || null, hash || null, createdAt, now);
     }
 
     /**
@@ -304,6 +329,7 @@ export class HolonDatabase {
      */
     upsertPathIndex(
         path: string,
+        source: string,
         contentId: string,
         objectType: string,
         size: number,
@@ -312,24 +338,25 @@ export class HolonDatabase {
         const now = new Date().toISOString();
         const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO path_index 
-      (path, content_id, object_type, size, mtime, tracked_at) 
-      VALUES (?, ?, ?, ?, ?, COALESCE(
-        (SELECT tracked_at FROM path_index WHERE path = ?),
+      (path, source, content_id, object_type, size, mtime, tracked_at) 
+      VALUES (?, ?, ?, ?, ?, ?, COALESCE(
+        (SELECT tracked_at FROM path_index WHERE path = ? AND source = ?),
         ?
       ))
     `);
-        stmt.run(path, contentId, objectType, size, mtime, path, now);
+        stmt.run(path, source, contentId, objectType, size, mtime, path, source, now);
     }
 
     /**
-     * Get path index entry by path
+     * Get path index entry by path and source
      */
-    getPathIndex(path: string): any | null {
-        const stmt = this.db.prepare('SELECT * FROM path_index WHERE path = ?');
-        const row = stmt.get(path) as any;
+    getPathIndex(path: string, source: string): any | null {
+        const stmt = this.db.prepare('SELECT * FROM path_index WHERE path = ? AND source = ?');
+        const row = stmt.get(path, source) as any;
         if (!row) return null;
         return {
             path: row.path,
+            source: row.source,
             contentId: row.content_id,
             objectType: row.object_type,
             size: row.size,
@@ -339,13 +366,17 @@ export class HolonDatabase {
     }
 
     /**
-     * Get all path index entries
+     * Get all path index entries (optionally filtered by source)
      */
-    getAllPathIndex(): any[] {
-        const stmt = this.db.prepare('SELECT * FROM path_index ORDER BY path');
-        const rows = stmt.all() as any[];
+    getAllPathIndex(source?: string): any[] {
+        const sql = source
+            ? 'SELECT * FROM path_index WHERE source = ? ORDER BY path'
+            : 'SELECT * FROM path_index ORDER BY path';
+        const stmt = this.db.prepare(sql);
+        const rows = (source ? stmt.all(source) : stmt.all()) as any[];
         return rows.map(row => ({
             path: row.path,
+            source: row.source,
             contentId: row.content_id,
             objectType: row.object_type,
             size: row.size,
@@ -357,9 +388,9 @@ export class HolonDatabase {
     /**
      * Delete path index entry
      */
-    deletePathIndex(path: string): void {
-        const stmt = this.db.prepare('DELETE FROM path_index WHERE path = ?');
-        stmt.run(path);
+    deletePathIndex(path: string, source: string): void {
+        const stmt = this.db.prepare('DELETE FROM path_index WHERE path = ? AND source = ?');
+        stmt.run(path, source);
     }
 
     /**
@@ -369,6 +400,65 @@ export class HolonDatabase {
         const stmt = this.db.prepare('SELECT path FROM path_index WHERE content_id = ?');
         const rows = stmt.all(contentId) as any[];
         return rows.map(row => row.path);
+    }
+
+    /**
+     * Insert a source
+     */
+    insertSource(name: string, type: string, config: any): void {
+        const now = new Date().toISOString();
+        const stmt = this.db.prepare(
+            'INSERT INTO sources (name, type, config, created_at) VALUES (?, ?, ?, ?)'
+        );
+        stmt.run(name, type, JSON.stringify(config), now);
+    }
+
+    /**
+     * Get a source by name
+     */
+    getSource(name: string): any | null {
+        const stmt = this.db.prepare('SELECT * FROM sources WHERE name = ?');
+        const row = stmt.get(name) as any;
+        if (!row) return null;
+        return {
+            name: row.name,
+            type: row.type,
+            config: JSON.parse(row.config),
+            lastSync: row.last_sync,
+            createdAt: row.created_at,
+        };
+    }
+
+    /**
+     * Get all sources
+     */
+    getAllSources(): any[] {
+        const stmt = this.db.prepare('SELECT * FROM sources ORDER BY name');
+        const rows = stmt.all() as any[];
+        return rows.map(row => ({
+            name: row.name,
+            type: row.type,
+            config: JSON.parse(row.config),
+            lastSync: row.last_sync,
+            createdAt: row.created_at,
+        }));
+    }
+
+    /**
+     * Update source last sync time
+     */
+    updateSourceLastSync(name: string): void {
+        const now = new Date().toISOString();
+        const stmt = this.db.prepare('UPDATE sources SET last_sync = ? WHERE name = ?');
+        stmt.run(now, name);
+    }
+
+    /**
+     * Delete a source
+     */
+    deleteSource(name: string): void {
+        const stmt = this.db.prepare('DELETE FROM sources WHERE name = ?');
+        stmt.run(name);
     }
 
     /**
