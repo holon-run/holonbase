@@ -11,6 +11,7 @@ import { diffStates } from './cli/diff.js';
 import { showStatus } from './cli/status.js';
 import { manageView } from './cli/view.js';
 import { revertPatch } from './cli/revert.js';
+import { importDocument } from './cli/import.js';
 
 const program = new Command();
 
@@ -203,6 +204,23 @@ program
     .action((options) => {
         try {
             exportRepository(options);
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// import command
+program
+    .command('import')
+    .description('Import a document into the knowledge base')
+    .argument('<file>', 'File to import')
+    .option('-t, --type <type>', 'Object type (note|file|evidence)')
+    .option('-a, --agent <agent>', 'Agent identifier')
+    .option('--title <title>', 'Document title')
+    .action((file: string, options) => {
+        try {
+            importDocument({ file, ...options });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

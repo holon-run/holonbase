@@ -77,6 +77,7 @@ holonbase export --format jsonl
 | `holonbase init [path]` | Initialize a new repository |
 | `holonbase status` | Show repository status and current view |
 | `holonbase commit <file>` | Commit a patch (use `-` for stdin) |
+| `holonbase import <file>` | Import a document into the knowledge base |
 | `holonbase log [-n N]` | Show patch history |
 | `holonbase show <id>` | Show object details |
 | `holonbase list [-t type]` | List objects in current state |
@@ -118,6 +119,42 @@ holonbase commit my-patch.json
 # List all views
 holonbase view list
 ```
+
+## Import Documents
+
+Import existing documents into the knowledge base:
+
+```bash
+# Import a Markdown file as a note
+holonbase import my-document.md
+
+# Import a PDF file
+holonbase import paper.pdf
+
+# Specify object type explicitly
+holonbase import notes.txt --type note
+
+# Set custom title and agent
+holonbase import doc.md --title "Important Notes" --agent user/alice
+```
+
+### Import Options
+
+| Option | Description |
+|--------|-------------|
+| `-t, --type <type>` | Object type (note\|file\|evidence), auto-detected if not specified |
+| `-a, --agent <agent>` | Agent identifier, defaults to `user/import` |
+| `--title <title>` | Document title, defaults to filename |
+
+### Auto-Detection
+
+The import command automatically detects the appropriate object type based on file extension:
+
+- **note**: `.md`, `.txt`, `.org` (full content imported)
+- **evidence**: `.url`, `.webloc` (reference imported)
+- **file**: all other files (metadata only)
+
+See [Import Guide](docs/IMPORT_GUIDE.md) for detailed documentation.
 
 ## Commit Enhancements
 

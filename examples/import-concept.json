@@ -1,0 +1,20 @@
+{
+    "op": "add",
+    "agent": "user/example",
+    "target": "example-concept-ai-alignment",
+    "payload": {
+        "object": {
+            "type": "concept",
+            "content": {
+                "name": "AI Alignment",
+                "definition": "The problem of ensuring that artificial intelligence systems behave in accordance with human values and intentions.",
+                "aliases": [
+                    "AI Safety",
+                    "Value Alignment"
+                ]
+            }
+        }
+    },
+    "confidence": 0.95,
+    "note": "Core concept in AI safety research"
+}
