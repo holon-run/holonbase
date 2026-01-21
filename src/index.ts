@@ -37,17 +37,12 @@ program
 // commit command
 program
     .command('commit')
-    .description('Commit a patch')
-    .argument('[file]', 'Patch JSON file (or use stdin with -)')
-    .option('--dry-run', 'Preview the commit without actually committing')
-    .option('--confirm', 'Ask for confirmation before committing')
-    .action(async (file?: string, cmdOptions?: any) => {
+    .description('Commit workspace changes')
+    .option('-m, --message <message>', 'Commit message')
+    .action(async (cmdOptions?: any) => {
         try {
             const options = {
-                file: file && file !== '-' ? file : undefined,
-                stdin: !file || file === '-',
-                dryRun: cmdOptions?.dryRun || false,
-                confirm: cmdOptions?.confirm || false,
+                message: cmdOptions?.message,
             };
             await commitPatch(options);
         } catch (error) {

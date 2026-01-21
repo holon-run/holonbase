@@ -1,31 +1,14 @@
-import { readFileSync } from 'fs';
 import { join } from 'path';
-import * as readline from 'readline';
+import { readFileSync } from 'fs';
 import { HolonDatabase } from '../storage/database.js';
 import { PatchManager } from '../core/patch.js';
-import { PatchInputSchema } from '../types/index.js';
 import { findHolonbaseRoot } from '../utils/repo.js';
 import { ConfigManager } from '../utils/config.js';
+import { WorkspaceScanner } from '../core/workspace.js';
+import { ChangeDetector } from '../core/changes.js';
 
 export interface CommitOptions {
-    file?: string;
-    stdin?: boolean;
-    dryRun?: boolean;
-    confirm?: boolean;
-}
-
-function promptUser(question: string): Promise<string> {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    return new Promise((resolve) => {
-        rl.question(question, (answer) => {
-            rl.close();
-            resolve(answer);
-        });
-    });
+    message?: string;
 }
 
 export async function commitPatch(options: CommitOptions): Promise<void> {
@@ -35,22 +18,6 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
         throw new Error('Not a holonbase repository (or any parent up to mount point)');
     }
 
-    // Read patch input
-    let patchJson: string;
-    if (options.stdin) {
-        // Read from stdin
-        patchJson = readFileSync(0, 'utf-8');
-    } else if (options.file) {
-        patchJson = readFileSync(options.file, 'utf-8');
-    } else {
-        throw new Error('Must provide either --file or read from stdin');
-    }
-
-    // Parse and validate
-    const patchInput = JSON.parse(patchJson);
-    const validated = PatchInputSchema.parse(patchInput);
-
-    // Open database and config
     const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
     const configPath = join(repoRoot, '.holonbase', 'config.json');
 
@@ -61,56 +28,169 @@ export async function commitPatch(options: CommitOptions): Promise<void> {
     // Get current view
     const currentView = config.getCurrentView();
 
-    // Dry-run mode: preview without committing
-    if (options.dryRun) {
-        console.log('=== Dry Run Mode ===');
-        console.log('Would commit:');
-        console.log(`  Operation: ${validated.op}`);
-        console.log(`  Target: ${validated.target}`);
-        console.log(`  Agent: ${validated.agent}`);
-        console.log(`  View: ${currentView}`);
+    // Scan workspace
+    const scanner = new WorkspaceScanner(repoRoot);
+    const workspaceFiles = scanner.scanDirectory();
 
-        if (validated.confidence !== undefined) {
-            console.log(`  Confidence: ${validated.confidence}`);
-        }
+    // Get path index
+    const pathIndex = db.getAllPathIndex();
 
-        // Show object details for add operation
-        if (validated.op === 'add' && validated.payload?.object) {
-            console.log(`  Object type: ${validated.payload.object.type}`);
-        }
+    // Detect changes
+    const detector = new ChangeDetector();
+    const changes = detector.detectChanges(workspaceFiles, pathIndex);
 
-        console.log('');
-        console.log('Run without --dry-run to commit.');
+    // Check if there are changes
+    if (!detector.hasChanges(changes)) {
+        console.log('Nothing to commit, working directory clean');
         db.close();
         return;
     }
 
-    // Confirm mode: ask for confirmation
-    if (options.confirm) {
-        console.log('About to commit:');
-        console.log(`  Operation: ${validated.op}`);
-        console.log(`  Target: ${validated.target}`);
-        console.log(`  Agent: ${validated.agent}`);
-        console.log(`  View: ${currentView}`);
-        console.log('');
+    const message = options.message || 'Update workspace';
+    const agent = config.getDefaultAgent() || 'user/local';
 
-        const answer = await promptUser('Proceed? [y/N]: ');
+    let patchCount = 0;
 
-        if (answer.toLowerCase() !== 'y') {
-            console.log('Aborted.');
-            db.close();
-            return;
+    // Process added files
+    for (const file of changes.added) {
+        // Read file content
+        const content = readFileSync(file.absolutePath, 'utf-8');
+
+        // Create add patch
+        const patch = patchManager.commit(
+            {
+                op: 'add',
+                agent,
+                target: file.path,
+                payload: {
+                    object: {
+                        type: file.type,
+                        content: {
+                            title: file.path,
+                            body: content,
+                        },
+                    },
+                },
+                note: message,
+            },
+            currentView
+        );
+
+        // Update path index
+        db.upsertPathIndex(file.path, file.contentId, file.type, file.size, file.mtime);
+        patchCount++;
+    }
+
+    // Process modified files
+    for (const modified of changes.modified) {
+        // Read file content
+        const content = readFileSync(modified.file.absolutePath, 'utf-8');
+
+        // Create update patch
+        const patch = patchManager.commit(
+            {
+                op: 'update',
+                agent,
+                target: modified.path,
+                payload: {
+                    changes: {
+                        body: content,
+                    },
+                    oldValues: {
+                        contentId: modified.oldContentId,
+                    },
+                },
+                note: message,
+            },
+            currentView
+        );
+
+        // Update path index
+        db.upsertPathIndex(
+            modified.file.path,
+            modified.file.contentId,
+            modified.file.type,
+            modified.file.size,
+            modified.file.mtime
+        );
+        patchCount++;
+    }
+
+    // Process deleted files
+    for (const deleted of changes.deleted) {
+        // Create delete patch
+        const patch = patchManager.commit(
+            {
+                op: 'delete',
+                agent,
+                target: deleted.path,
+                note: message,
+            },
+            currentView
+        );
+
+        // Remove from path index
+        db.deletePathIndex(deleted.path);
+        patchCount++;
+    }
+
+    // Process renamed files
+    for (const renamed of changes.renamed) {
+        // For now, treat rename as delete + add
+        // TODO: Add proper rename patch support
+
+        // Delete old path
+        db.deletePathIndex(renamed.oldPath);
+
+        // Add new path
+        const file = workspaceFiles.find(f => f.path === renamed.newPath);
+        if (file) {
+            const content = readFileSync(file.absolutePath, 'utf-8');
+
+            const patch = patchManager.commit(
+                {
+                    op: 'add',
+                    agent,
+                    target: file.path,
+                    payload: {
+                        object: {
+                            type: file.type,
+                            content: {
+                                title: file.path,
+                                body: content,
+                            },
+                        },
+                    },
+                    note: `${message} (renamed from ${renamed.oldPath})`,
+                },
+                currentView
+            );
+
+            db.upsertPathIndex(file.path, file.contentId, file.type, file.size, file.mtime);
+            patchCount++;
         }
     }
 
-    // Commit patch to current view
-    const patch = patchManager.commit(validated, currentView);
-
-    console.log(`Committed patch ${patch.id}`);
-    console.log(`  Operation: ${patch.content.op}`);
-    console.log(`  Target: ${patch.content.target}`);
-    console.log(`  Agent: ${patch.content.agent}`);
+    console.log(`✓ Committed ${patchCount} change${patchCount > 1 ? 's' : ''}`);
     console.log(`  View: ${currentView}`);
+    if (changes.added.length > 0) {
+        console.log(`  Added: ${changes.added.length} file${changes.added.length > 1 ? 's' : ''}`);
+    }
+    if (changes.modified.length > 0) {
+        console.log(
+            `  Modified: ${changes.modified.length} file${changes.modified.length > 1 ? 's' : ''}`
+        );
+    }
+    if (changes.deleted.length > 0) {
+        console.log(
+            `  Deleted: ${changes.deleted.length} file${changes.deleted.length > 1 ? 's' : ''}`
+        );
+    }
+    if (changes.renamed.length > 0) {
+        console.log(
+            `  Renamed: ${changes.renamed.length} file${changes.renamed.length > 1 ? 's' : ''}`
+        );
+    }
 
     db.close();
 }

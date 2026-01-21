@@ -71,6 +71,18 @@ export class HolonDatabase {
         updated_at TEXT NOT NULL
       );
 
+      -- Path index for workspace tracking (Git-style)
+      CREATE TABLE IF NOT EXISTS path_index (
+        path TEXT PRIMARY KEY,
+        content_id TEXT NOT NULL,
+        object_type TEXT NOT NULL,
+        size INTEGER,
+        mtime TEXT,
+        tracked_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_path_index_content ON path_index(content_id);
+
       -- Initialize HEAD if not exists
       INSERT OR IGNORE INTO config (key, value) VALUES ('head', '');
       
@@ -285,6 +297,78 @@ export class HolonDatabase {
     deleteView(name: string): void {
         const stmt = this.db.prepare('DELETE FROM views WHERE name = ?');
         stmt.run(name);
+    }
+
+    /**
+     * Insert or update path index entry
+     */
+    upsertPathIndex(
+        path: string,
+        contentId: string,
+        objectType: string,
+        size: number,
+        mtime: string
+    ): void {
+        const now = new Date().toISOString();
+        const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO path_index 
+      (path, content_id, object_type, size, mtime, tracked_at) 
+      VALUES (?, ?, ?, ?, ?, COALESCE(
+        (SELECT tracked_at FROM path_index WHERE path = ?),
+        ?
+      ))
+    `);
+        stmt.run(path, contentId, objectType, size, mtime, path, now);
+    }
+
+    /**
+     * Get path index entry by path
+     */
+    getPathIndex(path: string): any | null {
+        const stmt = this.db.prepare('SELECT * FROM path_index WHERE path = ?');
+        const row = stmt.get(path) as any;
+        if (!row) return null;
+        return {
+            path: row.path,
+            contentId: row.content_id,
+            objectType: row.object_type,
+            size: row.size,
+            mtime: row.mtime,
+            trackedAt: row.tracked_at,
+        };
+    }
+
+    /**
+     * Get all path index entries
+     */
+    getAllPathIndex(): any[] {
+        const stmt = this.db.prepare('SELECT * FROM path_index ORDER BY path');
+        const rows = stmt.all() as any[];
+        return rows.map(row => ({
+            path: row.path,
+            contentId: row.content_id,
+            objectType: row.object_type,
+            size: row.size,
+            mtime: row.mtime,
+            trackedAt: row.tracked_at,
+        }));
+    }
+
+    /**
+     * Delete path index entry
+     */
+    deletePathIndex(path: string): void {
+        const stmt = this.db.prepare('DELETE FROM path_index WHERE path = ?');
+        stmt.run(path);
+    }
+
+    /**
+     * Get paths by content ID (for rename detection)
+     */
+    getPathsByContentId(contentId: string): string[] {
+        const stmt = this.db.prepare('SELECT path FROM path_index WHERE content_id = ?');
+        const rows = stmt.all(contentId) as any[];
+        return rows.map(row => row.path);
     }
 
     /**

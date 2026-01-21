@@ -2,6 +2,8 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
+import { WorkspaceScanner } from '../core/workspace.js';
+import { ChangeDetector } from '../core/changes.js';
 
 export function showStatus(): void {
     const holonDir = join(process.cwd(), '.holonbase');
@@ -27,49 +29,63 @@ export function showStatus(): void {
         process.exit(1);
     }
 
-    // Get HEAD patch info
-    let headInfo = 'none';
-    if (view.headPatchId) {
-        const headPatch = db.getObject(view.headPatchId);
-        if (headPatch) {
-            const timeAgo = getTimeAgo(headPatch.createdAt);
-            headInfo = `${view.headPatchId.substring(0, 8)} (${timeAgo})`;
-        }
+    // Scan workspace
+    const scanner = new WorkspaceScanner(process.cwd());
+    const workspaceFiles = scanner.scanDirectory();
+
+    // Get path index
+    const pathIndex = db.getAllPathIndex();
+
+    // Detect changes
+    const detector = new ChangeDetector();
+    const changes = detector.detectChanges(workspaceFiles, pathIndex);
+
+    // Display status
+    console.log(`On view: ${currentView}`);
+    console.log('');
+
+    // Show renamed files
+    if (changes.renamed.length > 0) {
+        console.log('Renamed:');
+        changes.renamed.forEach(r => {
+            console.log(`  ${r.oldPath} → ${r.newPath}`);
+        });
+        console.log('');
     }
 
-    // Count objects by type
-    const allObjects = db.getAllStateViewObjects();
-    const objectCounts: Record<string, number> = {};
-    allObjects.forEach(obj => {
-        objectCounts[obj.type] = (objectCounts[obj.type] || 0) + 1;
-    });
+    // Show modified files
+    if (changes.modified.length > 0) {
+        console.log('Modified:');
+        changes.modified.forEach(m => {
+            console.log(`  ${m.path}  (${m.file.type})`);
+        });
+        console.log('');
+    }
 
-    console.log(`Repository: ${holonDir}`);
-    console.log(`View: ${currentView}`);
-    console.log(`HEAD: ${headInfo}`);
-    console.log('');
-    console.log('Objects:');
+    // Show deleted files
+    if (changes.deleted.length > 0) {
+        console.log('Deleted:');
+        changes.deleted.forEach(d => {
+            console.log(`  ${d.path}  (${d.objectType})`);
+        });
+        console.log('');
+    }
 
-    const types = ['concept', 'claim', 'relation', 'note', 'evidence', 'file'];
-    types.forEach(type => {
-        const count = objectCounts[type] || 0;
-        if (count > 0) {
-            console.log(`  ${type}s: ${count}`);
-        }
-    });
-    console.log(`  ${'─'.repeat(20)}`);
-    console.log(`  total: ${allObjects.length}`);
+    // Show untracked files
+    if (changes.added.length > 0) {
+        console.log('Untracked files:');
+        console.log('  (use "holonbase commit" to track)');
+        console.log('');
+        changes.added.forEach(f => {
+            console.log(`  ${f.path}  (${f.type})`);
+        });
+        console.log('');
+    }
+
+    // Summary
+    if (!detector.hasChanges(changes)) {
+        console.log('Nothing to commit, working directory clean');
+    }
 
     db.close();
-}
-
-function getTimeAgo(isoString: string): string {
-    const now = new Date();
-    const then = new Date(isoString);
-    const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
-
-    if (seconds < 60) return `${seconds} seconds ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
-    return `${Math.floor(seconds / 86400)} days ago`;
 }

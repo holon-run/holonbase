@@ -1,11 +1,34 @@
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
+import { WorkspaceScanner } from '../core/workspace.js';
 
 export interface InitOptions {
     path: string;
 }
+
+const HOLONIGNORE_TEMPLATE = `# Holonbase ignore patterns
+# Similar to .gitignore
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Build outputs
+node_modules/
+dist/
+build/
+
+# Version control
+.git/
+`;
 
 export function initRepository(options: InitOptions): void {
     const holonDir = join(options.path, '.holonbase');
@@ -18,9 +41,11 @@ export function initRepository(options: InitOptions): void {
     // Create .holonbase directory
     mkdirSync(holonDir, { recursive: true });
 
-    // Create subdirectories
-    mkdirSync(join(holonDir, 'files'), { recursive: true });
-    mkdirSync(join(holonDir, 'exports'), { recursive: true });
+    // Create .holonignore file
+    const ignorePath = join(options.path, '.holonignore');
+    if (!existsSync(ignorePath)) {
+        writeFileSync(ignorePath, HOLONIGNORE_TEMPLATE, 'utf-8');
+    }
 
     // Initialize config using ConfigManager
     const configPath = join(holonDir, 'config.json');
@@ -33,5 +58,29 @@ export function initRepository(options: InitOptions): void {
     db.initialize();
     db.close();
 
-    console.log(`Initialized empty Holonbase repository in ${holonDir}`);
+    console.log(`✓ Created .holonbase/`);
+    console.log(`✓ Created .holonignore`);
+    console.log('');
+
+    // Scan workspace and report found files
+    const scanner = new WorkspaceScanner(options.path);
+    const files = scanner.scanDirectory();
+
+    // Count by type
+    const noteCount = files.filter(f => f.type === 'note').length;
+    const fileCount = files.filter(f => f.type === 'file').length;
+
+    console.log(`✓ Scanned directory:`);
+    if (noteCount > 0) {
+        console.log(`    ${noteCount} markdown file${noteCount > 1 ? 's' : ''} (note)`);
+    }
+    if (fileCount > 0) {
+        console.log(`    ${fileCount} file${fileCount > 1 ? 's' : ''} (file)`);
+    }
+    if (noteCount === 0 && fileCount === 0) {
+        console.log(`    No trackable files found`);
+    }
+    console.log('');
+    console.log(`Run 'holonbase status' to see details`);
+    console.log(`Run 'holonbase commit' to start tracking`);
 }
