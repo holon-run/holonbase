@@ -8,6 +8,7 @@ export const ObjectTypeSchema = z.enum([
     'note',
     'evidence',
     'file',
+    'extract',
     'patch',
 ]);
 
@@ -64,6 +65,8 @@ export const PatchContentSchema = z.object({
     op: PatchOpSchema,
     target: z.string(),
     agent: z.string(),
+    source: z.string().optional(),
+    sourceRef: z.string().optional(),
     parentId: z.string().optional(),
     payload: z.any().optional(),
     confidence: z.number().min(0).max(1).optional(),
@@ -105,6 +108,8 @@ export const PatchInputSchema = z.object({
     op: PatchOpSchema,
     agent: z.string(),
     target: z.string(),
+    source: z.string().optional(),
+    sourceRef: z.string().optional(),
     payload: z.any().optional(),
     confidence: z.number().min(0).max(1).optional(),
     evidence: z.array(z.string()).optional(),

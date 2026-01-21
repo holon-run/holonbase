@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { SourceManager } from '../core/source-manager.js';
 import { findHolonbaseRoot } from '../utils/repo.js';
@@ -30,7 +30,7 @@ export async function handleSource(args: string[], options: any): Promise<void> 
                 const type = options.type || 'local';
                 const config: any = {};
                 if (type === 'local') {
-                    config.path = options.path || process.cwd();
+                    config.path = resolve(options.path || process.cwd());
                 }
                 await sourceManager.addSource(name, type, config);
                 console.log(`✓ Added source '${name}' (${type})`);

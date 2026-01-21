@@ -1,10 +1,11 @@
-import { FileEntry } from './workspace.js';
+import { FileEntry } from '../adapters/types.js';
 
 /**
  * Path index entry from database
  */
 export interface PathIndexEntry {
     path: string;
+    source: string;
     contentId: string;
     objectType: string;
     size: number;
@@ -77,12 +78,12 @@ export class ChangeDetector {
             if (!indexed) {
                 // New file
                 changes.added.push(file);
-            } else if (indexed.contentId !== file.contentId) {
+            } else if (indexed.contentId !== file.hash) {
                 // Modified file
                 changes.modified.push({
                     path: file.path,
                     oldContentId: indexed.contentId,
-                    newContentId: file.contentId,
+                    newContentId: file.hash,
                     file,
                 });
             }
@@ -129,20 +130,20 @@ export class ChangeDetector {
 
         // Match added files with deleted files by content ID
         for (const file of added) {
-            const candidates = deletedByContent.get(file.contentId);
+            const candidates = deletedByContent.get(file.hash);
             if (candidates && candidates.length > 0) {
                 // Found a match - this is a rename
                 const oldEntry = candidates[0];
                 renames.push({
                     oldPath: oldEntry.path,
                     newPath: file.path,
-                    contentId: file.contentId,
+                    contentId: file.hash,
                 });
 
                 // Remove from candidates to avoid duplicate matches
                 candidates.shift();
                 if (candidates.length === 0) {
-                    deletedByContent.delete(file.contentId);
+                    deletedByContent.delete(file.hash);
                 }
             }
         }

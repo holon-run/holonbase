@@ -2,7 +2,7 @@
 
 import { Command } from 'commander';
 import { initRepository } from './cli/init.js';
-import { commitPatch } from './cli/commit.js';
+import { syncCommand } from './cli/sync.js';
 import { logPatches } from './cli/log.js';
 import { showObject } from './cli/show.js';
 import { listObjects } from './cli/list.js';
@@ -34,17 +34,32 @@ program
         }
     });
 
-// commit command
+// sync command (unified sync for all sources)
+program
+    .command('sync')
+    .description('Sync all data sources')
+    .option('-m, --message <message>', 'Commit message')
+    .option('-s, --source <name>', 'Sync specific source')
+    .action(async (options) => {
+        try {
+            await syncCommand(options);
+        } catch (error) {
+            console.error('Error:', (error as Error).message);
+            process.exit(1);
+        }
+    });
+
+// commit command (alias for sync for transition)
 program
     .command('commit')
-    .description('Commit workspace changes')
+    .description('Commit workspace changes (alias for sync)')
     .option('-m, --message <message>', 'Commit message')
     .action(async (cmdOptions?: any) => {
         try {
             const options = {
                 message: cmdOptions?.message,
             };
-            await commitPatch(options);
+            await syncCommand(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -115,9 +130,9 @@ program
 program
     .command('status')
     .description('Show repository status')
-    .action(() => {
+    .action(async () => {
         try {
-            showStatus();
+            await showStatus();
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

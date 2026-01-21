@@ -20,6 +20,8 @@ export class PatchManager {
             op: input.op,
             target: input.target,
             agent: input.agent,
+            source: input.source,
+            sourceRef: input.sourceRef,
             parentId: head || undefined,
             payload: input.payload,
             confidence: input.confidence,

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
 import { WorkspaceScanner } from '../core/workspace.js';
@@ -61,7 +61,7 @@ export async function initRepository(options: InitOptions): Promise<void> {
     // Add default local source
     const sourceManager = new SourceManager(db);
     await sourceManager.addSource('local', 'local', {
-        path: options.path,
+        path: resolve(options.path || process.cwd()),
     });
 
     db.close();
