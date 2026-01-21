@@ -3,6 +3,7 @@ import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
 import { WorkspaceScanner } from '../core/workspace.js';
+import { SourceManager } from '../core/source-manager.js';
 
 export interface InitOptions {
     path: string;
@@ -30,7 +31,7 @@ build/
 .git/
 `;
 
-export function initRepository(options: InitOptions): void {
+export async function initRepository(options: InitOptions): Promise<void> {
     const holonDir = join(options.path, '.holonbase');
 
     // Check if already initialized
@@ -56,10 +57,18 @@ export function initRepository(options: InitOptions): void {
     const dbPath = join(holonDir, 'holonbase.db');
     const db = new HolonDatabase(dbPath);
     db.initialize();
+
+    // Add default local source
+    const sourceManager = new SourceManager(db);
+    await sourceManager.addSource('local', 'local', {
+        path: options.path,
+    });
+
     db.close();
 
     console.log(`✓ Created .holonbase/`);
     console.log(`✓ Created .holonignore`);
+    console.log(`✓ Added default local source`);
     console.log('');
 
     // Scan workspace and report found files

@@ -25,9 +25,9 @@ program
     .command('init')
     .description('Initialize a new holonbase repository')
     .argument('[path]', 'Path to initialize', '.')
-    .action((path: string) => {
+    .action(async (path: string) => {
         try {
-            initRepository({ path });
+            await initRepository({ path });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -220,6 +220,19 @@ program
             console.error('Error:', (error as Error).message);
             process.exit(1);
         }
+    });
+
+// source command
+program
+    .command('source')
+    .description('Manage data sources')
+    .argument('<action>', 'Action (add|list|remove)')
+    .argument('[name]', 'Source name')
+    .option('--type <type>', 'Source type (local|git)', 'local')
+    .option('--path <path>', 'Path for local source')
+    .action(async (action, name, options) => {
+        const { handleSource } = await import('./cli/source.js');
+        await handleSource([action, name], options);
     });
 
 program.parse();
