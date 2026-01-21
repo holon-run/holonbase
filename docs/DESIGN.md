@@ -10,6 +10,7 @@
 - [Patch 模型](#patch-模型)
 - [存储层设计](#存储层设计)
 - [视图与分支](#视图与分支)
+- [数据源管理](#数据源管理)
 - [CLI 命令](#cli-命令)
 - [项目结构](#项目结构)
 - [开发指南](#开发指南)
@@ -76,9 +77,17 @@ Holonbase 采用四层架构设计：
 
 > **注意**：此层在 v0 版本中为预留接口，暂未实现。
 
-### 4. File Store（内容挂载层）
+### 4. Adapter Layer（适配器层）
 
-支持将文件型对象绑定到本地/远程路径，仅记录引用元数据。
+通过适配器模式支持多种数据源（Source），实现统一的文件扫描和内容读取：
+
+- **LocalAdapter**：本地文件系统扫描。
+- **GitAdapter (Planned)**：监听 Git 变更。
+- **SourceManager**：统一管理多个数据源的生命周期。
+
+### 5. Content Processor（内容处理层）
+
+负责将不同类型的文件（.md, .pdf 等）转换为 Holonbase 的结构化对象，包括元数据提取和内容抽取。
 
 ---
 
@@ -104,9 +113,10 @@ interface HolonObject {
 | `concept` | 概念性实体 | `{ name, definition?, aliases? }` |
 | `claim` | 主张、观点 | `{ statement, confidence?, sourceId? }` |
 | `relation` | 结构化链接 | `{ sourceId, targetId, relationType, attributes? }` |
-| `note` | 非结构化文本 | `{ title?, body, linkedObjects? }` |
+| `note` | 非结构化文本 | `{ title?, body, hash, path? }` |
 | `evidence` | 来源参考 | `{ type, uri?, title?, description? }` |
-| `file` | 外部文件绑定 | `{ path, hash?, mimeType?, title?, size? }` |
+| `file` | 外部文件绑定 | `{ path, hash, mimeType?, metadata? }` |
+| `extract` | 抽取内容 | `{ sourceId, text, summary?, extractedAt }` |
 | `patch` | 变更记录 | `PatchContent`（见下节） |
 
 ### 内容可寻址（Content-Addressable）
@@ -136,8 +146,10 @@ Patch 是 Holonbase 的核心变更单位，通过 Patch 进行所有状态修�
 ```typescript
 interface PatchInput {
   op: 'add' | 'update' | 'delete' | 'link' | 'merge';
-  agent: string;        // 操作者标识（user/alice, agent/gpt-4 等）
-  target: string;       // 目标对象 ID
+  agent: string;        // 操作者标识
+  target: string;       // 目标对象 ID（路径或 UUID）
+  source?: string;      // 来源名称（如 'local'）
+  sourceRef?: string;   // 来源内部引用（如 gdrive ID）
   payload?: any;        // 操作载荷
   confidence?: number;  // 0-1 置信度
   evidence?: string[];  // 证据引用
@@ -199,7 +211,37 @@ CREATE TABLE objects (
   id TEXT PRIMARY KEY,      -- SHA256 哈希
   type TEXT NOT NULL,       -- 对象类型
   content TEXT NOT NULL,    -- JSON 内容
-  created_at TEXT NOT NULL  -- ISO 8601 时间戳
+  source TEXT,              -- 来源标识
+  hash TEXT,                -- 内容哈希
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+#### path_index 表（多源路径索引）
+
+```sql
+CREATE TABLE path_index (
+  path TEXT,
+  source TEXT,
+  content_id TEXT,
+  object_type TEXT,
+  size INTEGER,
+  mtime TEXT,
+  tracked_at TEXT,
+  PRIMARY KEY (path, source)
+);
+```
+
+#### sources 表（数据源配置）
+
+```sql
+CREATE TABLE sources (
+  name TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  config TEXT NOT NULL,
+  last_sync TEXT,
+  created_at TEXT NOT NULL
 );
 ```
 
@@ -241,30 +283,18 @@ CREATE TABLE config (
 
 ```typescript
 class HolonDatabase {
-  // 对象操作
-  insertObject(id, type, content, createdAt)
-  getObject(id): HolonObject | null
-  getObjectsByType(type): HolonObject[]
+  // 数据源操作
+  insertSource(name, type, config)
+  getSource(name)
+  getAllSources()
+  updateSourceLastSync(name)
+  deleteSource(name)
   
-  // Patch 操作
-  getAllPatches(limit?): HolonObject[]
-  getPatchesByTarget(targetId): HolonObject[]
-  
-  // 状态视图操作
-  upsertStateView(objectId, type, content, isDeleted, updatedAt)
-  getStateViewObject(objectId): any | null
-  getAllStateViewObjects(type?): any[]
-  
-  // 视图/分支操作
-  createView(name, headPatchId)
-  getView(name): View | null
-  getAllViews(): View[]
-  updateView(name, headPatchId)
-  deleteView(name)
-  
-  // 配置操作
-  getConfig(key): string | null
-  setConfig(key, value)
+  // 路径索引（多源）
+  upsertPathIndex(path, source, contentId, type, size, mtime)
+  getPathIndex(path, source)
+  getAllPathIndex(source?)
+  deletePathIndex(path, source)
 }
 ```
 
@@ -309,20 +339,31 @@ class ConfigManager {
 ### 视图工作流
 
 ```bash
-# 查看所有视图
-holonbase view list
+# 在新视图中同步
+holonbase sync -m "Experimental update"
+```
 
-# 创建新视图（从当前 HEAD 分支）
-holonbase view create experiment
+---
 
-# 切换视图
-holonbase view switch experiment
+## 数据源管理
 
-# 在新视图中提交
-holonbase commit patch.json
+Holonbase 支持将多个文件来源（Local, Git, Cloud）聚合到一个知识图谱中。
 
-# 删除视图
-holonbase view delete experiment
+### 核心概念
+- **SourceAdapter**：每种来源的驱动程序。
+- **SyncEngine**：协调适配器扫描、变化检测和对象处理。
+
+### 数据源工作流
+```bash
+# 添加数据源
+holonbase source add blog --path ./blog
+
+# 查看数据源列表
+holonbase source list
+
+# 执行同步
+holonbase sync
+```
 ```
 
 ---
@@ -337,15 +378,16 @@ holonbase view delete experiment
 
 | 命令 | 说明 | 实现文件 |
 |------|------|----------|
-| `holonbase init [path]` | 初始化仓库 | `src/cli/init.ts` |
-| `holonbase commit <file>` | 提交 Patch | `src/cli/commit.ts` |
-| `holonbase log [object_id]` | 查看历史 | `src/cli/log.ts` |
+| `holonbase init [path]` | 初始化仓库（自动添加 local 源） | `src/cli/init.ts` |
+| `holonbase sync [-s source]` | 同步数据源到知识库 | `src/cli/sync.ts` |
+| `holonbase source <action>` | 管理数据源 (add/list/remove) | `src/cli/source.ts` |
+| `holonbase log [object_id]` | 查看 Patch 历史 | `src/cli/log.ts` |
 | `holonbase show <id>` | 查看对象详情 | `src/cli/show.ts` |
-| `holonbase list [-t type]` | 列出对象 | `src/cli/list.ts` |
-| `holonbase status` | 仓库状态 | `src/cli/status.ts` |
+| `holonbase list [-t type]` | 列出视图中的对象 | `src/cli/list.ts` |
+| `holonbase status` | 查看多源变更状态 | `src/cli/status.ts` |
 | `holonbase diff --from A --to B` | 对比状态 | `src/cli/diff.ts` |
-| `holonbase export [-f format]` | 导出数据 | `src/cli/export.ts` |
-| `holonbase revert` | 撤销最后 Patch | `src/cli/revert.ts` |
+| `holonbase export [-f format]` | 导出完整数据 | `src/cli/export.ts` |
+| `holonbase revert` | 撤销最后一次 Sync Patch | `src/cli/revert.ts` |
 
 ### 视图命令
 
@@ -373,20 +415,24 @@ holonbase/
 │   ├── index.ts              # CLI 入口，命令注册
 │   │
 │   ├── cli/                  # CLI 命令实现
-│   │   ├── init.ts           # 初始化仓库
-│   │   ├── commit.ts         # 提交 Patch
-│   │   ├── log.ts            # 查看历史
-│   │   ├── show.ts           # 查看对象
-│   │   ├── list.ts           # 列出对象
-│   │   ├── diff.ts           # 对比状态
-│   │   ├── status.ts         # 仓库状态
-│   │   ├── export.ts         # 导出数据
-│   │   ├── view.ts           # 视图管理
-│   │   └── revert.ts         # 撤销 Patch
+│   │   ├── init.ts           # 初始化
+│   │   ├── sync.ts           # 同步数据源
+│   │   ├── source.ts         # 管理数据源
+│   │   ├── status.ts         # 状态查看
+│   │   └── ...
 │   │
-│   ├── core/                 # 核心业务逻辑
-│   │   ├── patch.ts          # PatchManager - Patch 创建与应用
-│   │   └── diff.ts           # Diff 计算与格式化
+│   ├── core/                 # 核心引擎
+│   │   ├── sync-engine.ts    # 同步协调引擎
+│   │   ├── source-manager.ts # 数据源管理
+│   │   ├── patch.ts          # Patch 管理
+│   │   └── changes.ts        # 差异检测
+│   │
+│   ├── adapters/             # 数据源适配器
+│   │   ├── types.ts          # 接口定义
+│   │   └── local.ts          # 本地文件系统适配器
+│   │
+│   ├── processors/           # 内容处理
+│   │   └── content.ts        # 提取元数据与内容
 │   │
 │   ├── storage/              # 存储层
 │   │   └── database.ts       # HolonDatabase - SQLite 操作
