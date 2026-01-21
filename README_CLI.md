@@ -1,217 +1,166 @@
-# Holonbase
+# Holonbase CLI Reference
 
-A version control engine for AI-driven structured knowledge systems.
+The command-line interface for managing your Holonbase knowledge repository.
 
-## Features
+## Table of Contents
 
-- **Event Sourcing Architecture**: All knowledge changes recorded as immutable patches
-- **Unified Object Model**: Everything is an object (concepts, claims, relations, notes, evidence, files, patches)
-- **Content-Addressable Storage**: SHA256-based object IDs ensure integrity
-- **SQL State View**: Query current knowledge state with SQL
-- **Git-like CLI**: Familiar commands for version control
+- [Core Commands](#core-commands)
+- [Source Management](#source-management)
+- [Deep Dive](#deep-dive)
 
-## Installation
+## Core Commands
+
+### `init`
+
+Initialize a new Holonbase repository.
 
 ```bash
-npm install -g holonbase
+holonbase init [path]
 ```
 
-## Quick Start
+- Creates `.holonbase` directory.
+- Initializes SQLite database.
+- automatically adds the current directory as the default `local` source.
+
+### `sync`
+
+Synchronize data sources with the knowledge base. This is the primary command to ingest changes.
 
 ```bash
-# Initialize a repository
-holonbase init
+# Sync all sources
+holonbase sync
 
-# Create a patch file
-cat > add-concept.json <<EOF
+# Sync a specific source
+holonbase sync --source <source_name>
+
+# Add a message to the sync patch
+holonbase sync -m "Updates from docs"
+```
+
+### `status`
+
+Show the status of all data sources and the current view.
+
+```bash
+holonbase status
+```
+
+Displays:
+- Current active View.
+- Changes in each data source (Added, Modified, Deleted).
+- Untracked files.
+
+### `source`
+
+Manage data sources.
+
+```bash
+# List all configured sources
+holonbase source list
+
+# Add a local folder source
+holonbase source add <name> --path <path_to_folder>
+
+# Remove a source
+holonbase source remove <name>
+```
+
+### `log`
+
+View the patch history of the repository or a specific object.
+
+```bash
+holonbase log [object_id]
+```
+
+### `list`
+
+List objects in the current state view.
+
+```bash
+holonbase list [-t <type>]
+```
+
+### `show`
+
+Show details of a specific object.
+
+```bash
+holonbase show <object_id>
+```
+
+## Deep Dive
+
+### Object Types
+
+Holonbase manages several types of objects:
+
+- **concept**: Conceptual entities (e.g., "AI Alignment").
+- **claim**: Statements or assertions.
+- **relation**: Structural links between objects (`source_id` -> `target_id`).
+- **note**: Unstructured text fragments (Markdown, Text).
+- **file**: Binary files or external documents (PDF, Images).
+- **extract**: Content extracted from files (e.g., text from PDF).
+- **evidence**: Source references.
+- **patch**: Immutable records of change.
+
+### Manual Patching (Advanced)
+
+While `sync` handles most file-based operations, you can manually create and commit patches for semantic objects.
+
+1. **Create a patch file (JSON)**:
+
+```json
 {
   "op": "add",
   "agent": "user/alice",
-  "target": "concept-quantum-entanglement",
+  "target": "concept:quantum-mechanics",
   "payload": {
     "object": {
       "type": "concept",
       "content": {
-        "name": "Quantum Entanglement",
-        "definition": "A quantum phenomenon where particles remain connected"
+        "name": "Quantum Mechanics",
+        "definition": "Fundamental theory in physics..."
       }
     }
   },
-  "confidence": 0.9,
-  "note": "Added from physics textbook"
+  "note": "Initial definition"
 }
-EOF
-
-# Commit the patch
-holonbase commit add-concept.json
-
-# View history
-holonbase log
-
-# List objects
-holonbase list
-
-# Get object details
-holonbase get concept-quantum-entanglement
-
-# Export data
-holonbase export --format jsonl
 ```
 
-## Object Types
-
-- **concept**: Conceptual entities (e.g., "AI Alignment")
-- **claim**: Statements or assertions
-- **relation**: Structural links between objects (e.g., "X is_a Y")
-- **note**: Unstructured text fragments
-- **evidence**: Source references and citations
-- **file**: External file bindings (PDF, audio, web pages)
-- **patch**: Change records (special type)
-
-## CLI Commands
-
-### Core Commands
-
-| Command | Description |
-|---------|-------------|
-| `holonbase init [path]` | Initialize a new repository |
-| `holonbase status` | Show repository status and current view |
-| `holonbase commit <file>` | Commit a patch (use `-` for stdin) |
-| `holonbase import <file>` | Import a document into the knowledge base |
-| `holonbase log [-n N]` | Show patch history |
-| `holonbase show <id>` | Show object details |
-| `holonbase list [-t type]` | List objects in current state |
-| `holonbase export [-f format]` | Export repository data |
-
-### Workspace Commands
-
-| Command | Description |
-|---------|-------------|
-| `holonbase view list` | List all views (branches) |
-| `holonbase view create <name>` | Create a new view from current HEAD |
-| `holonbase view switch <name>` | Switch to a different view |
-| `holonbase view delete <name>` | Delete a view |
-
-### Commit Options
-
-| Option | Description |
-|--------|-------------|
-| `--dry-run` | Preview the commit without actually committing |
-| `--confirm` | Ask for confirmation before committing |
-
-## Workspace Features
-
-Holonbase supports Git-like workspaces (views) for managing parallel knowledge states:
+2. **Commit the patch**:
 
 ```bash
-# Check current status
-holonbase status
+# 'commit' is an alias for 'sync' when processing patch files is implemented
+# Currently, manual patches can be managed via custom tooling or future 'apply' commands.
+# Note: The raw 'commit' command from v0 has been migrated to 'sync'. 
+```
 
-# Create an experimental view
-holonbase view create experiment
+*(Note: Direct manual patch creation via CLI is being refined. Using `sync` with file-based inputs is currently the recommended workflow).*
 
-# Switch to experiment view
-holonbase view switch experiment
+### Views (Workspaces)
 
-# Work in isolation
-holonbase commit my-patch.json
+Manage parallel states of your knowledge base.
 
-# List all views
+```bash
+# List views
 holonbase view list
+
+# Create a new view
+holonbase view create experiment-1
+
+# Switch views
+holonbase view switch experiment-1
 ```
 
-## Import Documents
+## Import Tools
 
-Import existing documents into the knowledge base:
+You can import single documents using the `import` command (useful for one-off additions).
 
 ```bash
-# Import a Markdown file as a note
-holonbase import my-document.md
-
-# Import a PDF file
-holonbase import paper.pdf
-
-# Specify object type explicitly
-holonbase import notes.txt --type note
-
-# Set custom title and agent
-holonbase import doc.md --title "Important Notes" --agent user/alice
+holonbase import my-note.md
 ```
 
-### Import Options
-
-| Option | Description |
-|--------|-------------|
-| `-t, --type <type>` | Object type (note\|file\|evidence), auto-detected if not specified |
-| `-a, --agent <agent>` | Agent identifier, defaults to `user/import` |
-| `--title <title>` | Document title, defaults to filename |
-
-### Auto-Detection
-
-The import command automatically detects the appropriate object type based on file extension:
-
-- **note**: `.md`, `.txt`, `.org` (full content imported)
-- **evidence**: `.url`, `.webloc` (reference imported)
-- **file**: all other files (metadata only)
-
-See [Import Guide](docs/IMPORT_GUIDE.md) for detailed documentation.
-
-## Commit Enhancements
-
-### Preview Mode
-
-Preview what will be committed without actually committing:
-
-```bash
-holonbase commit patch.json --dry-run
-```
-
-### Interactive Confirmation
-
-Require confirmation before committing (useful for AI-generated content):
-
-```bash
-holonbase commit patch.json --confirm
-```
-
-
-## Patch Operations
-
-- **add**: Create a new object
-- **update**: Modify an existing object
-- **delete**: Remove an object
-- **link**: Create a relation
-- **merge**: Merge multiple objects
-
-## Architecture
-
-```
-┌─────────────────────────────────────┐
-│           CLI Layer                 │
-├─────────────────────────────────────┤
-│  Patch Manager  │  State View       │
-├─────────────────────────────────────┤
-│         SQLite Storage              │
-│  objects | state_view | config      │
-└─────────────────────────────────────┘
-```
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run in dev mode
-npm run dev -- init
-
-# Run tests
-npm test
-```
-
-## License
-
-MIT
+Options:
+- `--type`: Force object type (note, file, etc).
+- `--agent`: Specify the agent ID.
