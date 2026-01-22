@@ -1,23 +1,26 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
+import { getDatabasePath, getConfigPath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 interface ViewOptions {
     action: 'list' | 'create' | 'switch' | 'delete';
     name?: string;
 }
 
-export function manageView(options: ViewOptions): void {
-    const holonDir = join(process.cwd(), '.holonbase');
-
-    if (!existsSync(holonDir)) {
-        console.error('Not a holonbase repository');
-        process.exit(1);
+export async function manageView(options: ViewOptions): Promise<void> {
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const dbPath = join(holonDir, 'holonbase.db');
-    const configPath = join(holonDir, 'config.json');
+    const dbPath = getDatabasePath();
+    const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
     const config = new ConfigManager(configPath);

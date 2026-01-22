@@ -1,9 +1,17 @@
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join, resolve, basename } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
 import { WorkspaceScanner } from '../core/workspace.js';
 import { SourceManager } from '../core/source-manager.js';
+import {
+    getDatabasePath,
+    getConfigPath,
+    getHomePath,
+    ensureHolonHome,
+    getHolonHome,
+    HolonHomeError
+} from '../utils/home.js';
 
 export interface InitOptions {
     path: string;
@@ -32,47 +40,76 @@ build/
 `;
 
 export async function initRepository(options: InitOptions): Promise<void> {
-    const holonDir = join(options.path, '.holonbase');
+    const targetPath = resolve(options.path || process.cwd());
 
-    // Check if already initialized
-    if (existsSync(holonDir)) {
-        throw new Error('Repository already initialized');
-    }
-
-    // Create .holonbase directory
-    mkdirSync(holonDir, { recursive: true });
-
-    // Create .holonignore file
-    const ignorePath = join(options.path, '.holonignore');
-    if (!existsSync(ignorePath)) {
-        writeFileSync(ignorePath, HOLONIGNORE_TEMPLATE, 'utf-8');
+    // Ensure holonbase home is initialized
+    let wasAlreadyInitialized = true;
+    try {
+        await ensureHolonHome();
+        // Check if database already exists
+        const dbPath = getDatabasePath();
+        wasAlreadyInitialized = existsSync(dbPath);
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
     // Initialize config using ConfigManager
-    const configPath = join(holonDir, 'config.json');
+    const configPath = getConfigPath();
     const config = new ConfigManager(configPath);
     config.save();
 
-    // Initialize database
-    const dbPath = join(holonDir, 'holonbase.db');
+    // Initialize database if not already initialized
+    const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
-    db.initialize();
 
-    // Add default local source
+    if (!wasAlreadyInitialized) {
+        db.initialize();
+        console.log(`✓ Initialized holonbase at ${getHolonHome()}`);
+    }
+
+    // Generate a unique source name based on directory basename
+    let sourceName = basename(targetPath);
+    // If name is empty or '.', use 'default'
+    if (!sourceName || sourceName === '.') {
+        sourceName = 'default';
+    }
+
+    // Check if source already exists using db directly
+    const existingSource = db.getSource(sourceName);
+
+    if (existingSource) {
+        console.log(`Source '${sourceName}' already exists in holonbase.`);
+        db.close();
+        console.log('');
+        console.log(`Run 'holonbase status' to see details`);
+        console.log(`Run 'holonbase sync' to update tracked files`);
+        return;
+    }
+
+    // Create .holonignore file in the target directory
+    const ignorePath = join(targetPath, '.holonignore');
+    if (!existsSync(ignorePath)) {
+        writeFileSync(ignorePath, HOLONIGNORE_TEMPLATE, 'utf-8');
+        console.log(`✓ Created .holonignore in ${targetPath}`);
+    }
+
+    // Add the current directory as a source
     const sourceManager = new SourceManager(db);
-    await sourceManager.addSource('local', 'local', {
-        path: resolve(options.path || process.cwd()),
+    await sourceManager.addSource(sourceName, 'local', {
+        path: targetPath,
     });
 
     db.close();
 
-    console.log(`✓ Created .holonbase/`);
-    console.log(`✓ Created .holonignore`);
-    console.log(`✓ Added default local source`);
+    console.log(`✓ Added source '${sourceName}' pointing to ${targetPath}`);
     console.log('');
 
     // Scan workspace and report found files
-    const scanner = new WorkspaceScanner(options.path);
+    const scanner = new WorkspaceScanner(targetPath);
     const files = scanner.scanDirectory();
 
     // Count by type
@@ -91,5 +128,5 @@ export async function initRepository(options: InitOptions): Promise<void> {
     }
     console.log('');
     console.log(`Run 'holonbase status' to see details`);
-    console.log(`Run 'holonbase commit' to start tracking`);
+    console.log(`Run 'holonbase sync' to start tracking`);
 }

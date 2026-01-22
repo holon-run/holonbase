@@ -1,11 +1,10 @@
-import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { SourceManager } from '../core/source-manager.js';
 import { ContentProcessor } from '../processors/content.js';
 import { PatchManager } from '../core/patch.js';
 import { SyncEngine, SyncResult } from '../core/sync-engine.js';
-import { findHolonbaseRoot } from '../utils/repo.js';
 import { ConfigManager } from '../utils/config.js';
+import { getDatabasePath, getConfigPath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 export interface SyncOptions {
     message?: string;
@@ -16,14 +15,19 @@ export interface SyncOptions {
  * Sync command handler
  */
 export async function syncCommand(options: SyncOptions): Promise<void> {
-    const repoRoot = findHolonbaseRoot(process.cwd());
-    if (!repoRoot) {
-        throw new Error('Not a holonbase repository (or any parent up to mount point)');
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const holonDir = join(repoRoot, '.holonbase');
-    const dbPath = join(holonDir, 'holonbase.db');
-    const configPath = join(holonDir, 'config.json');
+    const dbPath = getDatabasePath();
+    const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
     const config = new ConfigManager(configPath);

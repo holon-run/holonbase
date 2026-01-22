@@ -1,20 +1,23 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
 import { PatchManager } from '../core/patch.js';
 import { PatchContent } from '../types/index.js';
+import { getDatabasePath, getConfigPath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
-export function revertPatch(): void {
-    const holonDir = join(process.cwd(), '.holonbase');
-
-    if (!existsSync(holonDir)) {
-        console.error('Not a holonbase repository');
-        process.exit(1);
+export async function revertPatch(): Promise<void> {
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const dbPath = join(holonDir, 'holonbase.db');
-    const configPath = join(holonDir, 'config.json');
+    const dbPath = getDatabasePath();
+    const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
     const config = new ConfigManager(configPath);
