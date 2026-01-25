@@ -30,6 +30,7 @@ export async function syncCommand(options: SyncOptions): Promise<void> {
     const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
+    db.initialize();
     const config = new ConfigManager(configPath);
     const sourceManager = new SourceManager(db);
     const processor = new ContentProcessor();

@@ -23,6 +23,7 @@ export async function handleSource(args: string[], options: any): Promise<void> 
 
     const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
+    db.initialize();
     const sourceManager = new SourceManager(db);
 
     try {

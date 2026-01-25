@@ -20,6 +20,7 @@ export async function showStatus(): Promise<void> {
     const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
+    db.initialize();
     const config = new ConfigManager(configPath);
     const sourceManager = new SourceManager(db);
 

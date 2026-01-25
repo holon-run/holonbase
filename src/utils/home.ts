@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, constants } from 'fs';
-import { join, dirname } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { access } from 'fs/promises';
 
@@ -25,7 +25,8 @@ export class HolonHomeError extends Error {
 export function getHolonHome(): string {
     const envHome = process.env.HOLONBASE_HOME;
     if (envHome) {
-        return envHome;
+        // Normalize to absolute path to avoid CWD-dependent behavior
+        return resolve(envHome);
     }
     return join(homedir(), '.holonbase');
 }
@@ -47,7 +48,7 @@ export async function ensureHolonHome(homePath: string = getHolonHome()): Promis
                 `Failed to create HOLONBASE_HOME at '${homePath}': ${(error as Error).message}`
             );
         }
-        return;
+        // Fall through to verify the created directory
     }
 
     // Verify it's a directory
@@ -67,12 +68,12 @@ export async function ensureHolonHome(homePath: string = getHolonHome()): Promis
         );
     }
 
-    // Verify it's writable
+    // Verify it's writable and executable (both required for directory operations)
     try {
-        await access(homePath, constants.W_OK);
+        await access(homePath, constants.W_OK | constants.X_OK);
     } catch {
         throw new HolonHomeError(
-            `HOLONBASE_HOME at '${homePath}' is not writable. ` +
+            `HOLONBASE_HOME at '${homePath}' is not writable or not executable. ` +
             `Check permissions and try again.`
         );
     }

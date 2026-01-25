@@ -23,6 +23,7 @@ export async function manageView(options: ViewOptions): Promise<void> {
     const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
+    db.initialize();
     const config = new ConfigManager(configPath);
 
     switch (options.action) {

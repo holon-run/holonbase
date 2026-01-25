@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { join, resolve, basename } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { ConfigManager } from '../utils/config.js';
@@ -7,7 +7,6 @@ import { SourceManager } from '../core/source-manager.js';
 import {
     getDatabasePath,
     getConfigPath,
-    getHomePath,
     ensureHolonHome,
     getHolonHome,
     HolonHomeError
@@ -43,12 +42,8 @@ export async function initRepository(options: InitOptions): Promise<void> {
     const targetPath = resolve(options.path || process.cwd());
 
     // Ensure holonbase home is initialized
-    let wasAlreadyInitialized = true;
     try {
         await ensureHolonHome();
-        // Check if database already exists
-        const dbPath = getDatabasePath();
-        wasAlreadyInitialized = existsSync(dbPath);
     } catch (error) {
         if (error instanceof HolonHomeError) {
             console.error(error.message);
@@ -62,32 +57,24 @@ export async function initRepository(options: InitOptions): Promise<void> {
     const config = new ConfigManager(configPath);
     config.save();
 
-    // Initialize database if not already initialized
+    // Initialize database (idempotent - safe to call multiple times)
     const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
+    db.initialize();
 
-    if (!wasAlreadyInitialized) {
-        db.initialize();
-        console.log(`✓ Initialized holonbase at ${getHolonHome()}`);
-    }
-
-    // Generate a unique source name based on directory basename
-    let sourceName = basename(targetPath);
+    // Generate a base source name based on directory basename
+    let baseSourceName = basename(targetPath);
     // If name is empty or '.', use 'default'
-    if (!sourceName || sourceName === '.') {
-        sourceName = 'default';
+    if (!baseSourceName || baseSourceName === '.') {
+        baseSourceName = 'default';
     }
 
-    // Check if source already exists using db directly
-    const existingSource = db.getSource(sourceName);
-
-    if (existingSource) {
-        console.log(`Source '${sourceName}' already exists in holonbase.`);
-        db.close();
-        console.log('');
-        console.log(`Run 'holonbase status' to see details`);
-        console.log(`Run 'holonbase sync' to update tracked files`);
-        return;
+    // Disambiguate to ensure the source name is unique within this holonbase
+    let sourceName = baseSourceName;
+    let suffix = 2;
+    while (db.getSource(sourceName)) {
+        sourceName = `${baseSourceName}-${suffix}`;
+        suffix++;
     }
 
     // Create .holonignore file in the target directory
@@ -104,6 +91,8 @@ export async function initRepository(options: InitOptions): Promise<void> {
     });
 
     db.close();
+
+    console.log(`✓ Added source '${sourceName}' pointing to ${targetPath}`);
 
     console.log(`✓ Added source '${sourceName}' pointing to ${targetPath}`);
     console.log('');
