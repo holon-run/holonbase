@@ -25,7 +25,7 @@ const (
 // Skill represents a discovered or specified skill
 type Skill struct {
 	// Path is the absolute or relative path to the skill directory
-	// For builtin skills, this is the reference (e.g., "github/solve")
+	// For builtin skills, this is the reference (e.g., "github-solve")
 	Path string
 	// Name is the base name of the skill directory
 	Name string

@@ -1,6 +1,7 @@
 // Package builtin provides embedded builtin skills for Holon.
-// Builtin skills are embedded in the binary using Go's embed package
-// and can be loaded by reference (e.g., "github/solve").
+// Builtin skills are embedded in the binary using Go's embed package and can be
+// loaded by reference (in this repo, builtin skill refs are flat names like
+// "github-solve").
 //
 //go:generate sh -c "rm -rf skills && cp -r ../../skills ."
 package builtin
@@ -29,7 +30,8 @@ func FS() fs.FS {
 }
 
 // Has checks if a builtin skill exists at the given reference.
-// The reference is a slash-separated path like "github/solve".
+// The reference is the skill directory path within the embedded skills FS
+// (in this repo, typically a flat name like "github-solve").
 // Returns true if the skill directory exists and contains SKILL.md.
 func Has(ref string) bool {
 	f := FS()
@@ -44,7 +46,8 @@ func Has(ref string) bool {
 }
 
 // Load reads the SKILL.md file for a builtin skill.
-// The reference is a slash-separated path like "github/solve".
+// The reference is the skill directory path within the embedded skills FS
+// (in this repo, typically a flat name like "github-solve").
 // Returns the contents of SKILL.md or an error if the skill doesn't exist.
 func Load(ref string) ([]byte, error) {
 	f := FS()
