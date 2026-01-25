@@ -8,13 +8,14 @@ set -e
 echo "=== Holonbase Sync Demo ==="
 echo ""
 
-# 1. 初始化仓库（当前实现仍使用目录内 .holonbase；后续可重构为全局库）
+# 1. 初始化知识库（全局 KB 模式）
 echo "1. 初始化知识库..."
-rm -rf demo-kb
+export HOLONBASE_HOME="$(pwd)/.holonbase-tmp"
+rm -rf "$HOLONBASE_HOME" demo-kb
 mkdir demo-kb
 cd demo-kb
 holonbase init
-echo "✓ 知识库已初始化"
+echo "✓ 知识库已初始化 (全局位置: $HOLONBASE_HOME)"
 echo ""
 
 # 2. 写入一个 Markdown 笔记（由 local source 扫描并同步）
@@ -47,4 +48,5 @@ holonbase log -n 10
 echo ""
 
 echo "=== Demo 完成 ==="
-echo "知识库位置: $(pwd)"
+echo "工作目录: $(pwd)"
+echo "知识库位置: $HOLONBASE_HOME"

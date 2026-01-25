@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { HolonDatabase } from '../src/storage/database.js';
 import { PatchManager } from '../src/core/patch.js';
 
+// Use a test-specific HOLONBASE_HOME for isolation
 const TEST_DIR = join(process.cwd(), 'tests', 'tmp', 'integration');
-const HOLON_DIR = join(TEST_DIR, '.holonbase');
+const HOLON_DIR = TEST_DIR; // In global KB mode, HOLONBASE_HOME is the directory itself
 const DB_PATH = join(HOLON_DIR, 'holonbase.db');
 
 describe('Integration Tests', () => {

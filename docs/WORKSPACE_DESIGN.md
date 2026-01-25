@@ -1,6 +1,7 @@
 # Holonbase 工作目录设计方案
 
-> 本文档描述 Holonbase 的 Git 风格工作目录模型设计。
+> 本文档描述 Holonbase 的全局知识库（Global KB）模型设计。
+> **注意**: Holonbase 现在使用全局知识库模式，不再支持每目录一个 `.holonbase` 的旧模式。
 
 ## 设计目标
 
@@ -74,16 +75,25 @@ CREATE TABLE state_view (
 
 ## 目录结构
 
-### 用户自定义（无强制约定）
+### 全局知识库（Global KB）
+
+Holonbase 使用全局知识库，所有数据存储在 `HOLONBASE_HOME` 目录：
 
 ```
-my-knowledge-base/           # 用户已有目录
-├── .holonbase/
-│   ├── holonbase.db         # 数据库
-│   └── config.json          # 配置
-├── .holonignore             # 忽略文件
-│
-├── research/                # 用户自己的目录结构
+# 默认位置：~/.holonbase（可通过环境变量配置）
+~/.holonbase/
+├── config.json          # 全局配置
+└── holonbase.db         # SQLite 数据库
+```
+
+### 工作目录（用户文档）
+
+用户可以在任意目录创建和编辑文档，通过数据源（sources）将其添加到知识库：
+
+```
+my-project/              # 任意工作目录
+├── .holonignore         # 忽略规则（可选）
+├── research/
 │   ├── ai/
 │   │   └── alignment.md
 │   └── physics/
@@ -97,23 +107,19 @@ my-knowledge-base/           # 用户已有目录
 ### 配置文件
 
 ```json
-// .holonbase/config.json
+// ~/.holonbase/config.json（通过 HOLONBASE_HOME 指定）
 {
     "version": "0.2",
-    "currentView": "main",
-    "workspace": {
-        "fileExtensions": {
-            "note": [".md", ".txt", ".org"],
-            "file": [".pdf", ".doc", ".docx", ".png", ".jpg", ".mp3", ".mp4"]
-        }
-    }
+    "currentView": "main"
 }
 ```
 
 ### 忽略文件
 
+在工作目录创建 `.holonignore` 来指定需要忽略的文件：
+
 ```gitignore
-# .holonignore
+# .holonignore（放在工作目录根目录）
 .git/
 node_modules/
 *.tmp
@@ -128,23 +134,24 @@ node_modules/
 ### 1. 初始化
 
 ```bash
-cd my-existing-docs
+# 在任意工作目录
+cd my-project
+
+# 初始化全局知识库（只需执行一次）
 holonbase init
 
 # 输出
-✓ Created .holonbase/
-✓ Scanned directory:
-    5 markdown files (note)
-    2 PDF files (file)
+✓ Initialized Holonbase at: ~/.holonbase
+✓ Added current directory as 'local' source
 
 Run 'holonbase status' to see details
-Run 'holonbase commit' to start tracking
+Run 'holonbase sync' to start tracking
 ```
 
 **内部逻辑**：
-1. 创建 `.holonbase/` 目录和数据库
-2. 扫描工作目录，识别文件类型
-3. 不自动提交（等待用户确认）
+1. 创建 `HOLONBASE_HOME` 目录和数据库（默认 `~/.holonbase`）
+2. 自动将当前目录添加为 `local` 数据源
+3. 不自动同步（等待用户确认）
 
 ### 2. 查看状态
 
@@ -154,13 +161,14 @@ holonbase status
 # 输出
 On view: main
 
-Untracked files:
+Source: local (current directory)
+  Added:
   research/ai/alignment.md         (note)
   research/physics/quantum.md      (note)
   blog/post-2024.md                (note)
   attachments/paper.pdf            (file)
 
-Use 'holonbase commit' to track files
+Use 'holonbase sync' to track changes
 ```
 
 **内部逻辑**：
@@ -172,14 +180,14 @@ Use 'holonbase commit' to track files
    - Deleted（文件删除）
    - Renamed（重命名检测）
 
-### 3. 提交变更
+### 3. 同步变更
 
 ```bash
-holonbase commit -m "Initial import"
+holonbase sync -m "Initial import"
 
 # 输出
-✓ Tracked 4 note objects
-✓ Tracked 1 file object
+✓ Synced 4 note objects
+✓ Synced 1 file object
 ✓ Created 5 patches
 
 [main abc1234] Initial import
@@ -214,7 +222,17 @@ holonbase commit -m "Initial import"
        - 更新 path_index.path
 ```
 
-### 4. 查看历史
+### 4. 添加数据源
+
+```bash
+# 查看已配置的数据源
+holonbase source list
+
+# 添加新的本地目录作为数据源
+holonbase source add my-docs --path /path/to/docs
+```
+
+### 5. 查看历史
 
 ```bash
 holonbase log
@@ -227,7 +245,7 @@ holonbase log
   + attachments/paper.pdf
 ```
 
-### 5. 查看对象
+### 6. 查看对象
 
 ```bash
 # 通过路径查看
@@ -366,12 +384,12 @@ Modified:
 
 ## 与现有设计的变化
 
-| 方面 | 当前设计 | 新设计 |
+| 方面 | 旧设计 | 当前设计 |
 |------|---------|--------|
-| 对象 ID | 仅 Content ID | Content ID + Path ID |
-| 追踪机制 | 手动 import/commit patch | 自动扫描工作目录 |
-| 目录结构 | 未定义 | 用户自定义 |
-| 工作流 | Patch-first | File-first + Patch 生成 |
+| 知识库位置 | 每目录 `.holonbase` | 全局 `HOLONBASE_HOME` |
+| 追踪机制 | 单一目录自动扫描 | 多源配置 + 同步 |
+| 目录结构 | `.holonbase` 在项目根 | 用户自定义任意位置 |
+| 工作流 | `init` → `commit` | `init` → `source add` → `sync` |
 
 ---
 

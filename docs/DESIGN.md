@@ -314,10 +314,18 @@ Holonbase 支持 Git 风格的视图（View），用于管理并行的知识状�
 
 ### 视图存储
 
+Holonbase 使用全局知识库（Global KB）模式，所有数据存储在 `HOLONBASE_HOME` 目录：
+
 ```
-.holonbase/
+# HOLONBASE_HOME 默认为 ~/.holonbase，可通过环境变量配置
+~/.holonbase/
 ├── config.json       # 配置文件，存储 currentView
 └── holonbase.db      # 数据库，views 表存储视图信息
+```
+
+通过环境变量自定义位置：
+```bash
+export HOLONBASE_HOME=/custom/path/to/holonbase
 ```
 
 ### ConfigManager 类
@@ -577,11 +585,14 @@ npm link
 }
 ```
 
-### 仓库目录结构
+### 全局知识库目录结构
+
+Holonbase 使用全局知识库模式，所有数据统一存储在 `HOLONBASE_HOME`：
 
 ```
-.holonbase/
-├── config.json       # 本地配置
+# 默认位置：~/.holonbase（可通过环境变量配置）
+~/.holonbase/
+├── config.json       # 全局配置
 │   {
 │     "version": "0.1",
 │     "currentView": "main"
@@ -591,7 +602,15 @@ npm link
     ├── objects       # 所有对象（包括 Patch）
     ├── state_view    # 当前状态快照
     ├── views         # 视图/分支
+    ├── sources       # 多源配置
+    ├── path_index    # 路径索引
     └── config        # 数据库级配置
+```
+
+**环境变量配置**：
+```bash
+# 自定义知识库位置
+export HOLONBASE_HOME=/custom/path/to/holonbase
 ```
 
 ### 版本
