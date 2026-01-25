@@ -71,9 +71,9 @@ program
     .description('Show patch history')
     .argument('[object_id]', 'Object ID to show history for')
     .option('-n, --limit <number>', 'Limit number of patches', parseInt)
-    .action((objectId, options) => {
+    .action(async (objectId, options) => {
         try {
-            logPatches({ ...options, objectId });
+            await logPatches({ ...options, objectId });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -85,9 +85,9 @@ program
     .command('show')
     .description('Show object details')
     .argument('<id>', 'Object ID')
-    .action((id: string) => {
+    .action(async (id: string) => {
         try {
-            showObject(id);
+            await showObject(id);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -101,9 +101,9 @@ program
     .command('list')
     .description('List objects in current state')
     .option('-t, --type <type>', 'Filter by object type')
-    .action((options) => {
+    .action(async (options) => {
         try {
-            listObjects(options);
+            await listObjects(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -116,9 +116,9 @@ program
     .description('Compare two states')
     .requiredOption('--from <patch_id>', 'From patch ID (or HEAD)')
     .requiredOption('--to <patch_id>', 'To patch ID (or HEAD)')
-    .action((options) => {
+    .action(async (options) => {
         try {
-            diffStates(options);
+            await diffStates(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -146,9 +146,9 @@ const viewCmd = program
 viewCmd
     .command('list')
     .description('List all views')
-    .action(() => {
+    .action(async () => {
         try {
-            manageView({ action: 'list' });
+            await manageView({ action: 'list' });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -158,9 +158,9 @@ viewCmd
 viewCmd
     .command('create <name>')
     .description('Create a new view')
-    .action((name: string) => {
+    .action(async (name: string) => {
         try {
-            manageView({ action: 'create', name });
+            await manageView({ action: 'create', name });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -170,9 +170,9 @@ viewCmd
 viewCmd
     .command('switch <name>')
     .description('Switch to a view')
-    .action((name: string) => {
+    .action(async (name: string) => {
         try {
-            manageView({ action: 'switch', name });
+            await manageView({ action: 'switch', name });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -182,9 +182,9 @@ viewCmd
 viewCmd
     .command('delete <name>')
     .description('Delete a view')
-    .action((name: string) => {
+    .action(async (name: string) => {
         try {
-            manageView({ action: 'delete', name });
+            await manageView({ action: 'delete', name });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -195,9 +195,9 @@ viewCmd
 program
     .command('revert')
     .description('Revert the last patch by creating a reverse patch')
-    .action(() => {
+    .action(async () => {
         try {
-            revertPatch();
+            await revertPatch();
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);
@@ -210,9 +210,9 @@ program
     .description('Export repository data')
     .option('-f, --format <format>', 'Export format (json|jsonl)', 'jsonl')
     .option('-o, --output <path>', 'Output path')
-    .action((options) => {
+    .action(async (options) => {
         try {
-            exportRepository(options);
+            await exportRepository(options);
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

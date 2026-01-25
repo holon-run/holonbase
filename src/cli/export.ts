@@ -1,20 +1,26 @@
-import { writeFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
-import { findHolonbaseRoot } from '../utils/repo.js';
+import { getDatabasePath, getHomePath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 export interface ExportOptions {
     format: 'json' | 'jsonl';
     output?: string;
 }
 
-export function exportRepository(options: ExportOptions): void {
-    const repoRoot = findHolonbaseRoot(process.cwd());
-    if (!repoRoot) {
-        throw new Error('Not a holonbase repository');
+export async function exportRepository(options: ExportOptions): Promise<void> {
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
+    const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
 
     // Get all objects
@@ -22,7 +28,10 @@ export function exportRepository(options: ExportOptions): void {
     const objects = db.getAllStateViewObjects();
 
     const timestamp = new Date().toISOString().split('T')[0];
-    const exportDir = join(repoRoot, '.holonbase', 'exports', timestamp);
+    const exportDir = join(getHomePath('exports'), timestamp);
+
+    // Create export directory if not exists
+    mkdirSync(exportDir, { recursive: true });
 
     // Determine output path
     const outputPath = options.output || exportDir;

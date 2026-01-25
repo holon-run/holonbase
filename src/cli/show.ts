@@ -1,14 +1,19 @@
-import { join } from 'path';
 import { HolonDatabase } from '../storage/database.js';
-import { findHolonbaseRoot } from '../utils/repo.js';
+import { getDatabasePath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
-export function showObject(id: string): void {
-    const repoRoot = findHolonbaseRoot(process.cwd());
-    if (!repoRoot) {
-        throw new Error('Not a holonbase repository');
+export async function showObject(id: string): Promise<void> {
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
+    const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
 
     // First try to find in objects table (for patches and raw objects)

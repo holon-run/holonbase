@@ -1,7 +1,7 @@
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import { HolonDatabase } from '../storage/database.js';
 import { SourceManager } from '../core/source-manager.js';
-import { findHolonbaseRoot } from '../utils/repo.js';
+import { getDatabasePath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 /**
  * Handle source command
@@ -10,14 +10,20 @@ export async function handleSource(args: string[], options: any): Promise<void> 
     const action = args[0];
     const name = args[1];
 
-    const repoRoot = findHolonbaseRoot(process.cwd());
-    if (!repoRoot) {
-        console.error('Not a holonbase repository (or any parent up to mount point)');
-        process.exit(1);
+    // Ensure holonbase home is initialized
+    try {
+        await ensureHolonHome();
+    } catch (error) {
+        if (error instanceof HolonHomeError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        throw error;
     }
 
-    const dbPath = join(repoRoot, '.holonbase', 'holonbase.db');
+    const dbPath = getDatabasePath();
     const db = new HolonDatabase(dbPath);
+    db.initialize();
     const sourceManager = new SourceManager(db);
 
     try {
