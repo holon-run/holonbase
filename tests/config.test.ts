@@ -24,7 +24,6 @@ describe('ConfigManager Tests', () => {
         it('should create default config if file does not exist', () => {
             const config = new ConfigManager(CONFIG_PATH);
 
-            expect(config.getCurrentView()).toBe('main');
             expect(config.getDefaultAgent()).toBeUndefined();
         });
 
@@ -32,35 +31,13 @@ describe('ConfigManager Tests', () => {
             // Create a config file
             const existingConfig = {
                 version: '0.1',
-                currentView: 'experiment',
                 defaultAgent: 'user/alice',
             };
             writeFileSync(CONFIG_PATH, JSON.stringify(existingConfig));
 
             const config = new ConfigManager(CONFIG_PATH);
 
-            expect(config.getCurrentView()).toBe('experiment');
             expect(config.getDefaultAgent()).toBe('user/alice');
-        });
-    });
-
-    describe('Current View Management', () => {
-        it('should get and set current view', () => {
-            const config = new ConfigManager(CONFIG_PATH);
-
-            expect(config.getCurrentView()).toBe('main');
-
-            config.setCurrentView('experiment');
-            expect(config.getCurrentView()).toBe('experiment');
-        });
-
-        it('should persist current view to file', () => {
-            const config1 = new ConfigManager(CONFIG_PATH);
-            config1.setCurrentView('test-view');
-
-            // Load config again
-            const config2 = new ConfigManager(CONFIG_PATH);
-            expect(config2.getCurrentView()).toBe('test-view');
         });
     });
 
@@ -87,13 +64,11 @@ describe('ConfigManager Tests', () => {
     describe('Config Retrieval', () => {
         it('should return complete config object', () => {
             const config = new ConfigManager(CONFIG_PATH);
-            config.setCurrentView('my-view');
             config.setDefaultAgent('user/test');
 
             const fullConfig = config.getConfig();
 
             expect(fullConfig.version).toBe('0.1');
-            expect(fullConfig.currentView).toBe('my-view');
             expect(fullConfig.defaultAgent).toBe('user/test');
         });
     });

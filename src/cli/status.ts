@@ -1,8 +1,7 @@
 import { HolonDatabase } from '../storage/database.js';
-import { ConfigManager } from '../utils/config.js';
 import { ChangeDetector } from '../core/changes.js';
 import { SourceManager } from '../core/source-manager.js';
-import { getDatabasePath, getConfigPath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
+import { getDatabasePath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 export async function showStatus(): Promise<void> {
     // Ensure holonbase home is initialized
@@ -17,23 +16,15 @@ export async function showStatus(): Promise<void> {
     }
 
     const dbPath = getDatabasePath();
-    const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
     db.initialize();
-    const config = new ConfigManager(configPath);
     const sourceManager = new SourceManager(db);
 
-    const currentView = config.getCurrentView() || 'main';
-    const view = db.getView(currentView);
-
-    if (!view) {
-        console.error(`Current view '${currentView}' not found`);
-        db.close();
-        process.exit(1);
+    const head = db.getConfig('head');
+    if (head) {
+        console.log(`HEAD: ${head.substring(0, 8)}`);
     }
-
-    console.log(`On view: ${currentView}`);
     console.log('');
 
     const sources = sourceManager.listSources();

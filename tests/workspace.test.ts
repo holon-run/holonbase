@@ -23,87 +23,23 @@ describe('Workspace Tests', () => {
         }
     });
 
-    describe('Views Management', () => {
-        it('should initialize with main view', () => {
+    describe('Global HEAD Management', () => {
+        it('should initialize with empty HEAD', () => {
             const db = new HolonDatabase(DB_PATH);
             db.initialize();
 
-            const mainView = db.getView('main');
-            expect(mainView).toBeTruthy();
-            expect(mainView.name).toBe('main');
-            expect(mainView.headPatchId).toBe('');
+            const head = db.getConfig('head');
+            expect(head).toBe('');
 
             db.close();
         });
 
-        it('should create and retrieve views', () => {
-            const db = new HolonDatabase(DB_PATH);
-            db.initialize();
-
-            db.createView('experiment', 'patch-123');
-
-            const view = db.getView('experiment');
-            expect(view).toBeTruthy();
-            expect(view.name).toBe('experiment');
-            expect(view.headPatchId).toBe('patch-123');
-
-            db.close();
-        });
-
-        it('should list all views', () => {
-            const db = new HolonDatabase(DB_PATH);
-            db.initialize();
-
-            db.createView('experiment', 'patch-123');
-            db.createView('feature/test', 'patch-456');
-
-            const views = db.getAllViews();
-            expect(views.length).toBe(3); // main + 2 new views
-            expect(views.map(v => v.name)).toContain('main');
-            expect(views.map(v => v.name)).toContain('experiment');
-            expect(views.map(v => v.name)).toContain('feature/test');
-
-            db.close();
-        });
-
-        it('should update view HEAD', () => {
-            const db = new HolonDatabase(DB_PATH);
-            db.initialize();
-
-            db.createView('test', 'patch-1');
-            db.updateView('test', 'patch-2');
-
-            const view = db.getView('test');
-            expect(view.headPatchId).toBe('patch-2');
-
-            db.close();
-        });
-
-        it('should delete views', () => {
-            const db = new HolonDatabase(DB_PATH);
-            db.initialize();
-
-            db.createView('temp', 'patch-123');
-            expect(db.getView('temp')).toBeTruthy();
-
-            db.deleteView('temp');
-            expect(db.getView('temp')).toBeNull();
-
-            db.close();
-        });
-    });
-
-    describe('View-based Commits', () => {
-        it('should commit to specific view', () => {
+        it('should update HEAD on commit', () => {
             const db = new HolonDatabase(DB_PATH);
             db.initialize();
             const patchManager = new PatchManager(db);
 
-            // Create a view
-            db.createView('experiment', '');
-
-            // Commit to experiment view
-            const patch1 = patchManager.commit({
+            const patch = patchManager.commit({
                 op: 'add',
                 agent: 'user/alice',
                 target: 'concept-001',
@@ -113,60 +49,49 @@ describe('Workspace Tests', () => {
                         content: { name: 'Test' },
                     },
                 },
-            }, 'experiment');
+            });
 
-            // Verify view HEAD updated
-            const view = db.getView('experiment');
-            expect(view.headPatchId).toBe(patch1.id);
-
-            // Main view should still be empty
-            const mainView = db.getView('main');
-            expect(mainView.headPatchId).toBe('');
+            const head = db.getConfig('head');
+            expect(head).toBe(patch.id);
 
             db.close();
         });
+    });
 
-        it('should maintain separate patch chains for different views', () => {
+    describe('Patch Chaining', () => {
+        it('should chain patches from HEAD', () => {
             const db = new HolonDatabase(DB_PATH);
             db.initialize();
             const patchManager = new PatchManager(db);
 
-            // Commit to main
-            const mainPatch = patchManager.commit({
+            // First commit
+            const patch1 = patchManager.commit({
                 op: 'add',
                 agent: 'user/alice',
-                target: 'concept-main',
+                target: 'concept-001',
                 payload: {
                     object: {
                         type: 'concept',
-                        content: { name: 'Main Concept' },
+                        content: { name: 'Concept 1' },
                     },
                 },
-            }, 'main');
+            });
 
-            // Create experiment view from main
-            db.createView('experiment', mainPatch.id);
-
-            // Commit to experiment
-            const expPatch = patchManager.commit({
+            // Second commit should chain from first
+            const patch2 = patchManager.commit({
                 op: 'add',
-                agent: 'user/bob',
-                target: 'concept-exp',
+                agent: 'user/alice',
+                target: 'concept-002',
                 payload: {
                     object: {
                         type: 'concept',
-                        content: { name: 'Experiment Concept' },
+                        content: { name: 'Concept 2' },
                     },
                 },
-            }, 'experiment');
+            });
 
-            // Verify different HEADs
-            const mainView = db.getView('main');
-            const expView = db.getView('experiment');
-
-            expect(mainView.headPatchId).toBe(mainPatch.id);
-            expect(expView.headPatchId).toBe(expPatch.id);
-            expect(expPatch.content.parentId).toBe(mainPatch.id);
+            expect(patch2.content.parentId).toBe(patch1.id);
+            expect(db.getConfig('head')).toBe(patch2.id);
 
             db.close();
         });
