@@ -522,49 +522,72 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 	// This is important for skill mode: we only skip mode prompts if user didn't specify mode
 	modeExplicitByUser := solveMode != ""
 
+	// Resolve skills early to determine if we're in skill mode
+	// In skill mode, the skill (agent) is responsible for context collection and publishing
+	// Parse CLI skills
+	cliSkills := solveSkillPaths
+	for _, s := range skills.ParseSkillsList(solveSkillsList) {
+		cliSkills = append(cliSkills, s)
+	}
+
+	// Determine if we're in skill mode: skills are specified AND mode is not explicitly provided
+	// This matches the logic in runner.go where useSkillMode is determined
+	useSkillMode := len(cliSkills) > 0 && !modeExplicitByUser
+
 	// Collect context based on type
-	prov := github.NewProvider()
-	if refType == "pr" {
-		// Collect PR context
-		req := collector.CollectRequest{
-			Kind:      collector.KindPR,
-			Ref:       fmt.Sprintf("%s/%s#%d", solveRef.Owner, solveRef.Repo, solveRef.Number),
-			OutputDir: contextDir,
-			Options: collector.Options{
-				Token:            token,
-				IncludeDiff:      true,
-				UnresolvedOnly:   true,
-				IncludeChecks:    true,
-				ChecksOnlyFailed: false,
-				ChecksMax:        200,
-				TriggerCommentID: workflowMeta.TriggerCommentID,
-			},
-		}
-		if _, err := prov.Collect(ctx, req); err != nil {
-			return fmt.Errorf("failed to collect PR context: %w", err)
-		}
-		// Only override mode if user hasn't explicitly set it
-		if solveMode == "" {
-			solveMode = "pr-fix"
+	// In skill mode, skip the Go collector - the skill (agent) is responsible for invoking
+	// gh or other skill-specific collectors and writing context under /holon/input/context/
+	if !useSkillMode {
+		prov := github.NewProvider()
+		if refType == "pr" {
+			// Collect PR context
+			req := collector.CollectRequest{
+				Kind:      collector.KindPR,
+				Ref:       fmt.Sprintf("%s/%s#%d", solveRef.Owner, solveRef.Repo, solveRef.Number),
+				OutputDir: contextDir,
+				Options: collector.Options{
+					Token:            token,
+					IncludeDiff:      true,
+					UnresolvedOnly:   true,
+					IncludeChecks:    true,
+					ChecksOnlyFailed: false,
+					ChecksMax:        200,
+					TriggerCommentID: workflowMeta.TriggerCommentID,
+				},
+			}
+			if _, err := prov.Collect(ctx, req); err != nil {
+				return fmt.Errorf("failed to collect PR context: %w", err)
+			}
+			// Only override mode if user hasn't explicitly set it
+			if solveMode == "" {
+				solveMode = "pr-fix"
+			}
+		} else {
+			// Collect issue context
+			req := collector.CollectRequest{
+				Kind:      collector.KindIssue,
+				Ref:       fmt.Sprintf("%s/%s#%d", solveRef.Owner, solveRef.Repo, solveRef.Number),
+				OutputDir: contextDir,
+				Options: collector.Options{
+					Token:            token,
+					TriggerCommentID: workflowMeta.TriggerCommentID,
+				},
+			}
+			if _, err := prov.Collect(ctx, req); err != nil {
+				return fmt.Errorf("failed to collect issue context: %w", err)
+			}
+			// Only override mode if user hasn't explicitly set it
+			if solveMode == "" {
+				solveMode = "solve"
+			}
 		}
 	} else {
-		// Collect issue context
-		req := collector.CollectRequest{
-			Kind:      collector.KindIssue,
-			Ref:       fmt.Sprintf("%s/%s#%d", solveRef.Owner, solveRef.Repo, solveRef.Number),
-			OutputDir: contextDir,
-			Options: collector.Options{
-				Token:            token,
-				TriggerCommentID: workflowMeta.TriggerCommentID,
-			},
-		}
-		if _, err := prov.Collect(ctx, req); err != nil {
-			return fmt.Errorf("failed to collect issue context: %w", err)
-		}
-		// Only override mode if user hasn't explicitly set it
-		if solveMode == "" {
-			solveMode = "solve"
-		}
+		// In skill mode: context will be provided by the skill during its execution
+		// The skill (agent) is responsible for invoking any collectors and writing context
+		// under /holon/input/context/, so we do not validate context here
+		fmt.Println("Skill mode enabled: skipping Go collector, expecting skill-provided context")
+		// In skill mode, preserve the user's mode setting (or empty if not set)
+		// Don't auto-detect mode from refType
 	}
 
 	// Run early preflight checks before workspace preparation
@@ -684,15 +707,8 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 		return fmt.Errorf("path preflight checks failed: %w", err)
 	}
 
-	// Resolve skills (similar to run command but simpler - no spec or config)
-	// Parse CLI skills
-	cliSkills := solveSkillPaths
-	for _, s := range skills.ParseSkillsList(solveSkillsList) {
-		cliSkills = append(cliSkills, s)
-	}
-
-	// Resolve skills using the resolver
-	// For solve command: only CLI skills, no config or spec
+	// Resolve skills (deferred from earlier - we need workspace path for resolution)
+	// Use cliSkills parsed earlier from CLI flags; resolution happens after workspace prep
 	resolver := skills.NewResolver(workspacePrep.path)
 	resolvedSkills, err := resolver.Resolve(cliSkills, nil, nil)
 	if err != nil {
@@ -748,7 +764,7 @@ func runSolve(ctx context.Context, refStr, explicitType string) error {
 	fmt.Println("Publishing results...")
 	fmt.Println(strings.Repeat("=", 60))
 
-	if err := publishResults(ctx, solveRef, refType, inputDir, outDir, cleanupMode); err != nil {
+	if err := publishResults(ctx, solveRef, refType, inputDir, outDir, cleanupMode, useSkillMode); err != nil {
 		return fmt.Errorf("failed to publish results: %w", err)
 	}
 
@@ -828,7 +844,15 @@ func buildGoal(inputDir string, ref *pkggithub.SolveRef, refType string, trigger
 }
 
 // publishResults publishes the holon execution results
-func publishResults(ctx context.Context, ref *pkggithub.SolveRef, refType string, inputDir string, outDir string, cleanupMode string) error {
+// In skill mode, the Go publisher is skipped - the skill is responsible for publishing
+func publishResults(ctx context.Context, ref *pkggithub.SolveRef, refType string, inputDir string, outDir string, cleanupMode string, useSkillMode bool) error {
+	// In skill mode: skip the Go publisher entirely
+	// The skill is responsible for publishing (e.g., via gh or its own mechanism)
+	if useSkillMode {
+		fmt.Println("Skill mode enabled: skipping Go publisher, expecting skill-driven publishing")
+		return nil
+	}
+
 	// Prepare a clean workspace for publishing from manifest so that patches are
 	// applied to a baseline rather than an already-modified tree.
 	pubWS, err := preparePublishWorkspace(ctx, outDir)
