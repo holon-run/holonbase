@@ -12,15 +12,17 @@ The command-line interface for managing your Holonbase knowledge repository.
 
 ### `init`
 
-Initialize a new Holonbase repository.
+Initialize a new Holonbase knowledge base.
 
 ```bash
 holonbase init [path]
 ```
 
-- Creates `.holonbase` directory.
+- Creates global KB at `HOLONBASE_HOME` (default: `~/.holonbase`).
 - Initializes SQLite database.
-- automatically adds the current directory as the default `local` source.
+- Automatically adds the current directory as the default `local` source.
+
+**Note**: The `path` argument is for the working directory to add as a source. The actual knowledge base is stored globally in `HOLONBASE_HOME`.
 
 ### `sync`
 

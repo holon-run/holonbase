@@ -83,7 +83,6 @@ function matchPattern(path: string, pattern: string): boolean {
  * Default ignore patterns
  */
 export const DEFAULT_IGNORE_PATTERNS = [
-    '.holonbase/',
     '.git/',
     'node_modules/',
     '.DS_Store',
