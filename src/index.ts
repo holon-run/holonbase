@@ -9,7 +9,6 @@ import { listObjects } from './cli/list.js';
 import { exportRepository } from './cli/export.js';
 import { diffStates } from './cli/diff.js';
 import { showStatus } from './cli/status.js';
-import { manageView } from './cli/view.js';
 import { revertPatch } from './cli/revert.js';
 
 const program = new Command();
@@ -132,59 +131,6 @@ program
     .action(async () => {
         try {
             await showStatus();
-        } catch (error) {
-            console.error('Error:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// view command
-const viewCmd = program
-    .command('view')
-    .description('Manage workspace views');
-
-viewCmd
-    .command('list')
-    .description('List all views')
-    .action(async () => {
-        try {
-            await manageView({ action: 'list' });
-        } catch (error) {
-            console.error('Error:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-viewCmd
-    .command('create <name>')
-    .description('Create a new view')
-    .action(async (name: string) => {
-        try {
-            await manageView({ action: 'create', name });
-        } catch (error) {
-            console.error('Error:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-viewCmd
-    .command('switch <name>')
-    .description('Switch to a view')
-    .action(async (name: string) => {
-        try {
-            await manageView({ action: 'switch', name });
-        } catch (error) {
-            console.error('Error:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-viewCmd
-    .command('delete <name>')
-    .description('Delete a view')
-    .action(async (name: string) => {
-        try {
-            await manageView({ action: 'delete', name });
         } catch (error) {
             console.error('Error:', (error as Error).message);
             process.exit(1);

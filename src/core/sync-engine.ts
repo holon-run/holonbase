@@ -52,7 +52,6 @@ export class SyncEngine {
         }
 
         const agent = this.config.getDefaultAgent() || 'user/local';
-        const currentView = this.config.getCurrentView() || 'main';
         const commitMessage = message || `Sync source: ${sourceName}`;
 
         // 1. Handle Added Files
@@ -72,7 +71,7 @@ export class SyncEngine {
                     }
                 },
                 note: commitMessage
-            }, currentView);
+            });
 
             this.db.upsertPathIndex(
                 file.path,
@@ -98,7 +97,7 @@ export class SyncEngine {
                     changes: processed.content
                 },
                 note: commitMessage
-            }, currentView);
+            });
 
             this.db.upsertPathIndex(
                 modified.path,
@@ -118,7 +117,7 @@ export class SyncEngine {
                 target: deleted.path,
                 source: sourceName,
                 note: commitMessage
-            }, currentView);
+            });
 
             this.db.deletePathIndex(deleted.path, sourceName);
         }
@@ -134,7 +133,7 @@ export class SyncEngine {
                 target: renamed.oldPath,
                 source: sourceName,
                 note: `${commitMessage} (Rename part 1: delete)`
-            }, currentView);
+            });
             this.db.deletePathIndex(renamed.oldPath, sourceName);
 
             const file = files.find(f => f.path === renamed.newPath);
@@ -154,7 +153,7 @@ export class SyncEngine {
                         }
                     },
                     note: `${commitMessage} (Rename part 2: add)`
-                }, currentView);
+                });
 
                 this.db.upsertPathIndex(
                     renamed.newPath,

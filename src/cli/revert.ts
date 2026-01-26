@@ -1,8 +1,7 @@
 import { HolonDatabase } from '../storage/database.js';
-import { ConfigManager } from '../utils/config.js';
 import { PatchManager } from '../core/patch.js';
 import { PatchContent } from '../types/index.js';
-import { getDatabasePath, getConfigPath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
+import { getDatabasePath, ensureHolonHome, HolonHomeError } from '../utils/home.js';
 
 export async function revertPatch(): Promise<void> {
     // Ensure holonbase home is initialized
@@ -17,25 +16,22 @@ export async function revertPatch(): Promise<void> {
     }
 
     const dbPath = getDatabasePath();
-    const configPath = getConfigPath();
 
     const db = new HolonDatabase(dbPath);
     db.initialize();
-    const config = new ConfigManager(configPath);
     const patchManager = new PatchManager(db);
 
-    // Get current view
-    const currentView = config.getCurrentView();
-    const view = db.getView(currentView);
+    // Get HEAD patch ID from global config
+    const headPatchId = db.getConfig('head');
 
-    if (!view || !view.headPatchId) {
+    if (!headPatchId) {
         console.error('Nothing to revert');
         db.close();
         process.exit(1);
     }
 
     // Get HEAD patch
-    const headPatch = db.getObject(view.headPatchId);
+    const headPatch = db.getObject(headPatchId);
     if (!headPatch) {
         console.error('HEAD patch not found');
         db.close();
@@ -55,7 +51,7 @@ export async function revertPatch(): Promise<void> {
     }
 
     // Commit the reverse patch
-    const reversePatch = patchManager.commit(reversePatchInput, currentView);
+    const reversePatch = patchManager.commit(reversePatchInput);
 
     console.log(`Reverted patch ${headPatch.id.substring(0, 8)}`);
     console.log(`Created reverse patch ${reversePatch.id.substring(0, 8)}`);

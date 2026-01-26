@@ -4,7 +4,6 @@ import { dirname } from 'path';
 export interface HolonConfig {
     version: string;
     defaultAgent?: string;
-    currentView: string;
 }
 
 export class ConfigManager {
@@ -28,7 +27,6 @@ export class ConfigManager {
         // Default config
         return {
             version: '0.1',
-            currentView: 'main',
         };
     }
 
@@ -41,21 +39,6 @@ export class ConfigManager {
             mkdirSync(dir, { recursive: true });
         }
         writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
-    }
-
-    /**
-     * Get current view
-     */
-    getCurrentView(): string {
-        return this.config.currentView;
-    }
-
-    /**
-     * Set current view
-     */
-    setCurrentView(viewName: string): void {
-        this.config.currentView = viewName;
-        this.save();
     }
 
     /**
