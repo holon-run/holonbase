@@ -203,14 +203,15 @@ You MAY use these commands directly via `gh` CLI:
 - `gh pr view` - View PR details
 - `gh pr comment` - Comment on PRs
 - `gh issue edit` - Edit issue metadata (labels, assignees)
-- `gh api` - Make read API calls
+- `gh pr create` - Create pull requests
+- `gh api` - Make API calls
 
-You MUST NOT use these directly (use artifacts instead):
-- `git push` - Code pushing must go through artifacts
-- `gh pr create` - PR creation must go through artifacts
-- `gh pr merge` - PR merging must go through artifacts
+You are responsible for **all git operations**:
+- `git checkout -b` - Create feature branches
+- `git add` / `git commit` - Commit changes
+- `git push` - Push branches to remote
 
-For GitHub publishing, use the `scripts/publish.sh` script with intent files.
+For detailed workflows including git operations, see [references/issue-solve-workflow.md](references/issue-solve-workflow.md) or [references/pr-fix-workflow.md](references/pr-fix-workflow.md).
 
 ## Output Contract
 
@@ -254,14 +255,7 @@ For GitHub publishing, use the `scripts/publish.sh` script with intent files.
    }
    ```
 
-#### For Issue Context (Issue-solve mode)
-
-3. **`${GITHUB_OUTPUT_DIR}/diff.patch`**: Git-compatible patch with code changes
-
-4. **`${GITHUB_OUTPUT_DIR}/pr-fix.json`** (if creating PR): PR creation metadata
-   - `title`: PR title
-   - `body`: PR body (references issue)
-   - `branch`: Suggested branch name
+**Note**: For PR-fix mode, you should **push your changes to the PR branch** directly (not create a new PR).
 
 ## Reference Documentation
 
@@ -296,23 +290,29 @@ Detailed workflow guides and best practices are available in the `references/` d
 
 1. Analyze PR feedback, review threads, and CI failures
 2. Identify and fix errors in priority order (build → test → import → lint)
-3. Generate `${GITHUB_OUTPUT_DIR}/pr-fix.json` with fix status and responses
-4. Use `scripts/reply-reviews.sh` to post replies
-5. For full workflow details, see [references/pr-fix-workflow.md](references/pr-fix-workflow.md)
+3. Commit and push changes to the PR branch:
+   ```bash
+   git add .
+   git commit -m "Fix: <description>"
+   git push
+   ```
+4. Generate `${GITHUB_OUTPUT_DIR}/pr-fix.json` with fix status and responses
+5. Use `scripts/reply-reviews.sh` to post replies
+6. For full workflow details, see [references/pr-fix-workflow.md](references/pr-fix-workflow.md)
 
 **IMPORTANT**: Commit your code fixes BEFORE replying to reviews. This ensures reviewers can see your actual fixes when reading your replies.
 
 ### Issue-Solve Mode
 
-1. Analyze the issue and implement solution
-2. Generate `${GITHUB_OUTPUT_DIR}/summary.md` with explanation
-3. Generate `${GITHUB_OUTPUT_DIR}/diff.patch` with code changes
-4. Use GitHub publishing to create PR
-5. For full workflow details, see [references/issue-solve-workflow.md](references/issue-solve-workflow.md)
-
-### GitHub Publishing
-
-1. Generate artifacts (summary.md, publish-intent.json, pr-fix.json as needed)
-2. Use `scripts/publish.sh --intent=${GITHUB_OUTPUT_DIR}/publish-intent.json`
-3. Script handles GitHub API calls, idempotency, and error handling
-4. For complete guide, see [references/github-publishing.md](references/github-publishing.md)
+1. Collect context (if not pre-populated): Run `scripts/collect.sh "<ref>"`
+2. Analyze the issue and implement solution
+3. Create feature branch and commit changes:
+   ```bash
+   git checkout -b feature/issue-<number>
+   git add .
+   git commit -m "Feature: <description>"
+   git push -u origin feature/issue-<number>
+   ```
+4. Generate `${GITHUB_OUTPUT_DIR}/summary.md` with explanation
+5. Create PR using `gh pr create`
+6. For full workflow details, see [references/issue-solve-workflow.md](references/issue-solve-workflow.md)
